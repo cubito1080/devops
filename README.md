@@ -102,6 +102,47 @@ test/
 
 ---
 
+## Entity Relationship Diagram
+
+```mermaid
+erDiagram
+    CONTINENT {
+        int continent_id PK
+        string name
+        int net_area
+        jsonb geology
+        jsonb structure
+        float change_ratio
+        int population
+    }
+
+    COUNTRY {
+        int country_id PK
+        int continent_id FK
+        string name
+        bigint population
+        int net_area
+        jsonb political_system
+        jsonb economical_index
+        jsonb languages
+    }
+
+    CITY {
+        int city_id PK
+        int country_id FK
+        string city_name
+        jsonb economical_index
+        jsonb languages
+        int population
+        int net_area
+    }
+
+    CONTINENT ||--o{ COUNTRY : "has"
+    COUNTRY ||--o{ CITY : "has"
+```
+
+---
+
 ## Domain Model
 
 ### Continent

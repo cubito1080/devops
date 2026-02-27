@@ -3,20 +3,20 @@ import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 @Entity()
 export class City {
   @PrimaryGeneratedColumn()
-  city_id: number;
+  city_id!: number;
 
   @Column()
-  city_name: string;
+  city_name!: string;
 
   @Column('jsonb')
-  economical_index: Record<string, number>;
+  economical_index!: Record<string, number>;
 
   @Column('jsonb')
-  languages: string[];
+  languages!: string[];
 
   @Column()
-  population: number;
+  population!: number;
 
   @Column()
-  net_area: number;
+  net_area!: number;
 }

@@ -3,23 +3,23 @@ import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 @Entity()
 export class Continent {
   @PrimaryGeneratedColumn()
-  continent_id: number;
+  continent_id!: number;
 
   @Column()
-  name: string;
+  name!: string;
 
   @Column()
-  net_area: number;
+  net_area!: number;
 
   @Column('jsonb')
-  geology: string[]; // the composition of the continent, it focuses on chemical composition , types of rocks and the age of the material
+  geology!: string[]; // the composition of the continent, it focuses on chemical composition , types of rocks and the age of the material
 
   @Column('jsonb')
-  structure: string[]; //it refers how pieces are organized and how they are conected with tectonically
+  structure!: string[]; //it refers how pieces are organized and how they are conected with tectonically
 
   @Column()
-  change_ratio: number; // the rate at which the continent is changing in terms of area, geology and structure, fixed number
+  change_ratio!: number; // the rate at which the continent is changing in terms of area, geology and structure, fixed number
 
   @Column()
-  population: number;
+  population!: number;
 }

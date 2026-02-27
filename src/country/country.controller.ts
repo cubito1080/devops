@@ -12,5 +12,5 @@ import { Country } from './country.entity';
 
 @Controller('countries')
 export class CountryController {
-  contructor(private readonly CountryService: CountryService){
-}}
+  constructor(private readonly countryService: CountryService) {}
+}

@@ -1,12 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { city } from './city.entity';
+import { City } from './city.entity';
 
-@Inyectable()
+@Injectable()
 export class CityService {
   constructor(
-    @inyectRepository(City)
+    @InjectRepository(City)
     private cityRepository: Repository<City>,
   ) {}
 }

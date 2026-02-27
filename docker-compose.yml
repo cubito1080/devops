@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: jero
+      POSTGRES_PASSWORD: 123
+      POSTGRES_DB: geography_db
+    ports:
+      - '5433:5432'
+    volumes:
+      - geography_data:/var/lib/postgresql/data
+
+volumes:
+  geography_data:

@@ -1,9 +1,20 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  PrimaryGeneratedColumn,
+  JoinColumn,
+  ManyToOne,
+} from 'typeorm';
+import { Country } from '../country/country.entity';
 
 @Entity()
 export class City {
   @PrimaryGeneratedColumn()
   city_id!: number;
+
+  @ManyToOne(() => Country)
+  @JoinColumn({ name: 'country_id' })
+  country!: Country;
 
   @Column()
   city_name!: string;

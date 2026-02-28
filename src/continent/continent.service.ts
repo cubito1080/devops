@@ -67,4 +67,12 @@ export class ContinentService {
     Object.assign(continent, dto);
     return await this.continentRepository.save(continent);
   }
+
+  async remove(id: number): Promise<{ message: string }> {
+    await this.findOne(id);
+
+    await this.continentRepository.delete(id);
+
+    return { message: \Continent with id \ has been deleted\ };
+  }
 }

@@ -25,4 +25,8 @@ export class ContinentService {
 
     return await this.continentRepository.save(continent);
   }
+
+  async findAll(): Promise<Continent[]> {
+    return await this.continentRepository.find();
+  }
 }

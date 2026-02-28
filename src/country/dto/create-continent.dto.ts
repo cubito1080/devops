@@ -1,23 +1,26 @@
-import { IsString, IsNumber, IsArray, isArray } from 'class-validator';
+import { IsArray, IsNumber, IsObject, IsString } from 'class-validator';
 
-export class CreateContinentDto {
+export class CreateCountryDto {
+  @IsNumber()
+  continent_id!: number;
+
   @IsString()
   name!: string;
+
+  @IsNumber()
+  population!: number;
 
   @IsNumber()
   net_area!: number;
 
   @IsArray()
   @IsString({ each: true })
-  geology!: string[];
+  political_system!: string[];
 
-  @isArray()
+  @IsObject()
+  economical_index!: Record<string, number>;
+
+  @IsArray()
   @IsString({ each: true })
-  structure!: string[];
-
-  @IsNumber()
-  change_ratio!: number;
-
-  @IsNumber()
-  population!: number;
+  languages!: string[];
 }

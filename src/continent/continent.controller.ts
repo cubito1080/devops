@@ -2,7 +2,7 @@ import {
   Controller,
   Get,
   Post,
-  Put,
+  Patch,
   Delete,
   Body,
   Param,
@@ -28,7 +28,11 @@ export class ContinentController {
   @Post()
   @ApiOperation({ summary: 'Create a continent' })
   @ApiBody({ type: CreateContinentDto })
-  @ApiResponse({ status: 201, description: 'Continent created', type: Continent })
+  @ApiResponse({
+    status: 201,
+    description: 'Continent created',
+    type: Continent,
+  })
   @ApiResponse({ status: 400, description: 'Validation failed' })
   @ApiResponse({ status: 409, description: 'Continent name already exists' })
   create(@Body() dto: CreateContinentDto): Promise<Continent> {
@@ -37,7 +41,11 @@ export class ContinentController {
 
   @Get()
   @ApiOperation({ summary: 'Get all continents' })
-  @ApiResponse({ status: 200, description: 'List of all continents', type: [Continent] })
+  @ApiResponse({
+    status: 200,
+    description: 'List of all continents',
+    type: [Continent],
+  })
   findAll(): Promise<Continent[]> {
     return this.continentService.findAll();
   }
@@ -52,12 +60,19 @@ export class ContinentController {
     return this.continentService.findOne(id);
   }
 
-  @Put(':id')
+  @Patch(':id')
   @ApiOperation({ summary: 'Update a continent by id' })
   @ApiParam({ name: 'id', description: 'Continent numeric id', example: 1 })
   @ApiBody({ type: UpdateContinentDto })
-  @ApiResponse({ status: 200, description: 'Continent updated', type: Continent })
-  @ApiResponse({ status: 400, description: 'Validation failed or id is not a number' })
+  @ApiResponse({
+    status: 200,
+    description: 'Continent updated',
+    type: Continent,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation failed or id is not a number',
+  })
   @ApiResponse({ status: 404, description: 'Continent not found' })
   @ApiResponse({ status: 409, description: 'Continent name already exists' })
   update(

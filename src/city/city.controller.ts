@@ -2,7 +2,7 @@
   Controller,
   Get,
   Post,
-  Put,
+  Patch,
   Delete,
   Body,
   Param,
@@ -31,7 +31,10 @@ export class CityController {
   @ApiResponse({ status: 201, description: 'City created', type: City })
   @ApiResponse({ status: 400, description: 'Validation failed' })
   @ApiResponse({ status: 404, description: 'Country not found' })
-  @ApiResponse({ status: 409, description: 'City name already exists in this country' })
+  @ApiResponse({
+    status: 409,
+    description: 'City name already exists in this country',
+  })
   create(@Body() dto: CreateCityDto): Promise<City> {
     return this.cityService.create(dto);
   }
@@ -53,14 +56,20 @@ export class CityController {
     return this.cityService.findOne(id);
   }
 
-  @Put(':id')
+  @Patch(':id')
   @ApiOperation({ summary: 'Update a city by id' })
   @ApiParam({ name: 'id', description: 'City numeric id', example: 1 })
   @ApiBody({ type: UpdateCityDto })
   @ApiResponse({ status: 200, description: 'City updated', type: City })
-  @ApiResponse({ status: 400, description: 'Validation failed or id is not a number' })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation failed or id is not a number',
+  })
   @ApiResponse({ status: 404, description: 'City or country not found' })
-  @ApiResponse({ status: 409, description: 'City name already exists in this country' })
+  @ApiResponse({
+    status: 409,
+    description: 'City name already exists in this country',
+  })
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateCityDto,

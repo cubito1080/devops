@@ -2,7 +2,7 @@
   Controller,
   Get,
   Post,
-  Put,
+  Patch,
   Delete,
   Body,
   Param,
@@ -38,7 +38,11 @@ export class CountryController {
 
   @Get()
   @ApiOperation({ summary: 'Get all countries' })
-  @ApiResponse({ status: 200, description: 'List of all countries', type: [Country] })
+  @ApiResponse({
+    status: 200,
+    description: 'List of all countries',
+    type: [Country],
+  })
   findAll(): Promise<Country[]> {
     return this.countryService.findAll();
   }
@@ -53,12 +57,15 @@ export class CountryController {
     return this.countryService.findOne(id);
   }
 
-  @Put(':id')
+  @Patch(':id')
   @ApiOperation({ summary: 'Update a country by id' })
   @ApiParam({ name: 'id', description: 'Country numeric id', example: 1 })
   @ApiBody({ type: UpdateCountryDto })
   @ApiResponse({ status: 200, description: 'Country updated', type: Country })
-  @ApiResponse({ status: 400, description: 'Validation failed or id is not a number' })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation failed or id is not a number',
+  })
   @ApiResponse({ status: 404, description: 'Country or continent not found' })
   @ApiResponse({ status: 409, description: 'Country name already exists' })
   update(

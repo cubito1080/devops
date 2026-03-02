@@ -2,6 +2,7 @@
   Controller,
   Get,
   Post,
+  Put,
   Body,
   Param,
   ParseIntPipe,
@@ -9,6 +10,7 @@
 import { CityService } from './city.service';
 import { City } from './city.entity';
 import { CreateCityDto } from './dto/create-city.dto';
+import { UpdateCityDto } from './dto/update-city.dto';
 
 @Controller('cities')
 export class CityController {
@@ -27,5 +29,13 @@ export class CityController {
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number): Promise<City> {
     return this.cityService.findOne(id);
+  }
+
+  @Put(':id')
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateCityDto,
+  ): Promise<City> {
+    return this.cityService.update(id, dto);
   }
 }

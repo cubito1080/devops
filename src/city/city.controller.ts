@@ -1,5 +1,6 @@
 ﻿import {
   Controller,
+  Get,
   Post,
   Body,
 } from '@nestjs/common';
@@ -14,5 +15,10 @@ export class CityController {
   @Post()
   create(@Body() dto: CreateCityDto): Promise<City> {
     return this.cityService.create(dto);
+  }
+
+  @Get()
+  findAll(): Promise<City[]> {
+    return this.cityService.findAll();
   }
 }

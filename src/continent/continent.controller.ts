@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Patch,
   Delete,
   Body,
@@ -78,6 +79,21 @@ export class ContinentController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateContinentDto,
+  ): Promise<Continent> {
+    return this.continentService.update(id, dto);
+  }
+
+  @Put(':id')
+  @ApiOperation({ summary: 'Replace a continent by id (all fields required)' })
+  @ApiParam({ name: 'id', description: 'Continent numeric id', example: 1 })
+  @ApiBody({ type: CreateContinentDto })
+  @ApiResponse({ status: 200, description: 'Continent replaced', type: Continent })
+  @ApiResponse({ status: 400, description: 'Validation failed or id is not a number' })
+  @ApiResponse({ status: 404, description: 'Continent not found' })
+  @ApiResponse({ status: 409, description: 'Continent name already exists' })
+  replace(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateContinentDto,
   ): Promise<Continent> {
     return this.continentService.update(id, dto);
   }

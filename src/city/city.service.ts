@@ -44,4 +44,8 @@ export class CityService {
     });
     return await this.cityRepository.save(city);
   }
+
+  async findAll(): Promise<City[]> {
+    return await this.cityRepository.find({ relations: ['country'] });
+  }
 }

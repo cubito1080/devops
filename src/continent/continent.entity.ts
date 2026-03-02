@@ -17,9 +17,9 @@ export class Continent {
   @Column('jsonb')
   structure!: string[]; //it refers how pieces are organized and how they are conected with tectonically
 
-  @Column()
+  @Column('float')
   change_ratio!: number; // the rate at which the continent is changing in terms of area, geology and structure, fixed number
 
-  @Column()
+  @Column('bigint')
   population!: number;
 }

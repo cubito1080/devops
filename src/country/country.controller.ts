@@ -2,6 +2,7 @@
   Controller,
   Get,
   Post,
+  Put,
   Body,
   Param,
   ParseIntPipe,
@@ -9,6 +10,7 @@
 import { CountryService } from './country.service';
 import { Country } from './country.entity';
 import { CreateCountryDto } from './dto/create-continent.dto';
+import { UpdateCountryDto } from './dto/update-continent.dto';
 
 @Controller('countries')
 export class CountryController {
@@ -27,5 +29,13 @@ export class CountryController {
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number): Promise<Country> {
     return this.countryService.findOne(id);
+  }
+
+  @Put(':id')
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateCountryDto,
+  ): Promise<Country> {
+    return this.countryService.update(id, dto);
   }
 }

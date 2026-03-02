@@ -64,15 +64,12 @@ export class CountryService {
   }
 
   async update(id: number, dto: UpdateCountryDto): Promise<Country> {
-    const country = await this.countryRepository.findOne({
-      where: { country_id: id },
-    });
+    const country = await this.findOne(id);
 
-    if (!country) {
-      throw new NotFoundException(`Country with id ${id} does not exist`);
-    }
-
-    if (dto.continent_id !== undefined) {
+    if (
+      dto.continent_id &&
+      dto.continent_id !== country.continent.continent_id
+    ) {
       const continent = await this.continentRepository.findOne({
         where: { continent_id: dto.continent_id },
       });

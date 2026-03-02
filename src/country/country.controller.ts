@@ -3,6 +3,7 @@
   Get,
   Post,
   Put,
+  Delete,
   Body,
   Param,
   ParseIntPipe,
@@ -37,5 +38,10 @@ export class CountryController {
     @Body() dto: UpdateCountryDto,
   ): Promise<Country> {
     return this.countryService.update(id, dto);
+  }
+
+  @Delete(':id')
+  remove(@Param('id', ParseIntPipe) id: number): Promise<{ message: string }> {
+    return this.countryService.remove(id);
   }
 }

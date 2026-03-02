@@ -3,6 +3,7 @@
   Get,
   Post,
   Body,
+  Param,
   ParseIntPipe,
 } from '@nestjs/common';
 import { CountryService } from './country.service';
@@ -21,5 +22,10 @@ export class CountryController {
   @Get()
   findAll(): Promise<Country[]> {
     return this.countryService.findAll();
+  }
+
+  @Get(':id')
+  findOne(@Param('id', ParseIntPipe) id: number): Promise<Country> {
+    return this.countryService.findOne(id);
   }
 }

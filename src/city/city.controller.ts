@@ -3,6 +3,8 @@
   Get,
   Post,
   Body,
+  Param,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { CityService } from './city.service';
 import { City } from './city.entity';
@@ -20,5 +22,10 @@ export class CityController {
   @Get()
   findAll(): Promise<City[]> {
     return this.cityService.findAll();
+  }
+
+  @Get(':id')
+  findOne(@Param('id', ParseIntPipe) id: number): Promise<City> {
+    return this.cityService.findOne(id);
   }
 }

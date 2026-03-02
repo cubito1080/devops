@@ -1,4 +1,4 @@
-﻿import {
+import {
   ConflictException,
   Injectable,
   NotFoundException,
@@ -23,6 +23,7 @@ export class CountryService {
     const continent = await this.continentRepository.findOne({
       where: { continent_id: dto.continent_id },
     });
+    // type: Continent | null
 
     if (!continent) {
       throw new NotFoundException(
@@ -96,5 +97,11 @@ export class CountryService {
     const { continent_id: _, ...fieldsToUpdate } = dto;
     Object.assign(country, fieldsToUpdate);
     return await this.countryRepository.save(country);
+  }
+
+  async remove(id: number): Promise<{ message: string }> {
+    await this.findOne(id);
+    await this.countryRepository.delete(id);
+    return { message: `Country with id ${id} has been deleted` };
   }
 }

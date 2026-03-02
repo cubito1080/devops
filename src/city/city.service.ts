@@ -1,4 +1,4 @@
-﻿import {
+import {
   ConflictException,
   Injectable,
   NotFoundException,
@@ -93,5 +93,11 @@ export class CityService {
 
     Object.assign(city, fieldToUpdate);
     return await this.cityRepository.save(city);
+  }
+
+  async remove(id: number): Promise<{ message: string }> {
+    await this.findOne(id);
+    await this.cityRepository.delete(id);
+    return { message: `City with id ${id} has been deleted` };
   }
 }

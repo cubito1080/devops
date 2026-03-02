@@ -80,8 +80,15 @@ export class CountryController {
   @ApiOperation({ summary: 'Replace a country by id (all fields required)' })
   @ApiParam({ name: 'id', description: 'Country numeric id', example: 1 })
   @ApiBody({ type: CreateCountryDto })
-  @ApiResponse({ status: 200, description: 'Country replaced', type: Country })
-  @ApiResponse({ status: 400, description: 'Validation failed or id is not a number' })
+  @ApiResponse({
+    status: 200,
+    description: 'Country replaced',
+    type: Country,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation failed or id is not a number',
+  })
   @ApiResponse({ status: 404, description: 'Country or continent not found' })
   @ApiResponse({ status: 409, description: 'Country name already exists' })
   replace(

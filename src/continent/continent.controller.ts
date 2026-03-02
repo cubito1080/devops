@@ -87,8 +87,15 @@ export class ContinentController {
   @ApiOperation({ summary: 'Replace a continent by id (all fields required)' })
   @ApiParam({ name: 'id', description: 'Continent numeric id', example: 1 })
   @ApiBody({ type: CreateContinentDto })
-  @ApiResponse({ status: 200, description: 'Continent replaced', type: Continent })
-  @ApiResponse({ status: 400, description: 'Validation failed or id is not a number' })
+  @ApiResponse({
+    status: 200,
+    description: 'Continent replaced',
+    type: Continent,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation failed or id is not a number',
+  })
   @ApiResponse({ status: 404, description: 'Continent not found' })
   @ApiResponse({ status: 409, description: 'Continent name already exists' })
   replace(

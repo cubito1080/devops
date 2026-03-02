@@ -83,9 +83,15 @@ export class CityController {
   @ApiParam({ name: 'id', description: 'City numeric id', example: 1 })
   @ApiBody({ type: CreateCityDto })
   @ApiResponse({ status: 200, description: 'City replaced', type: City })
-  @ApiResponse({ status: 400, description: 'Validation failed or id is not a number' })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation failed or id is not a number',
+  })
   @ApiResponse({ status: 404, description: 'City or country not found' })
-  @ApiResponse({ status: 409, description: 'City name already exists in this country' })
+  @ApiResponse({
+    status: 409,
+    description: 'City name already exists in this country',
+  })
   replace(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: CreateCityDto,

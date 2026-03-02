@@ -24,8 +24,16 @@ const SEED = [
     continent: {
       name: 'Europe',
       net_area: 10_530_000,
-      geology: ['Precambrian shields', 'Paleozoic fold belts', 'Alpine orogeny'],
-      structure: ['Baltic Shield', 'East European Platform', 'Hercynian massifs'],
+      geology: [
+        'Precambrian shields',
+        'Paleozoic fold belts',
+        'Alpine orogeny',
+      ],
+      structure: [
+        'Baltic Shield',
+        'East European Platform',
+        'Hercynian massifs',
+      ],
       change_ratio: 0.01,
       population: 447_000_000,
     },
@@ -96,8 +104,17 @@ const SEED = [
     continent: {
       name: 'Americas',
       net_area: 42_549_000,
-      geology: ['Canadian Shield', 'Appalachian fold belt', 'Andean orogeny', 'Amazon basin sediments'],
-      structure: ['North American Craton', 'South American Plate', 'Caribbean Plate'],
+      geology: [
+        'Canadian Shield',
+        'Appalachian fold belt',
+        'Andean orogeny',
+        'Amazon basin sediments',
+      ],
+      structure: [
+        'North American Craton',
+        'South American Plate',
+        'Caribbean Plate',
+      ],
       change_ratio: 0.015,
       population: 1_009_000_000,
     },
@@ -168,8 +185,18 @@ const SEED = [
     continent: {
       name: 'Asia',
       net_area: 44_579_000,
-      geology: ['Siberian Craton', 'Himalayan orogeny', 'Arabian shield', 'Tethys sedimentary belt'],
-      structure: ['Eurasian Plate', 'Indian Plate', 'Pacific Plate margin', 'Arabian Plate'],
+      geology: [
+        'Siberian Craton',
+        'Himalayan orogeny',
+        'Arabian shield',
+        'Tethys sedimentary belt',
+      ],
+      structure: [
+        'Eurasian Plate',
+        'Indian Plate',
+        'Pacific Plate margin',
+        'Arabian Plate',
+      ],
       change_ratio: 0.02,
       population: 4_700_000_000,
     },
@@ -178,7 +205,9 @@ const SEED = [
         name: 'China',
         population: 1_400_000_000,
         net_area: 9_596_960,
-        political_system: ['Unitary Marxist-Leninist one-party socialist republic'],
+        political_system: [
+          'Unitary Marxist-Leninist one-party socialist republic',
+        ],
         economical_index: { gdp_trillion_usd: 17.96, gini: 38.2 },
         languages: ['Mandarin Chinese'],
         capital: {

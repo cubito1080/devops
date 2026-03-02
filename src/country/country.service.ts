@@ -8,6 +8,7 @@ import { Repository } from 'typeorm';
 import { Country } from './country.entity';
 import { CreateCountryDto } from './dto/create-continent.dto';
 import { Continent } from '../continent/continent.entity';
+import { UpdateCountryDto } from './dto/update-continent.dto';
 
 @Injectable()
 export class CountryService {
@@ -59,5 +60,41 @@ export class CountryService {
       throw new NotFoundException(`Country with id ${id} does not exist`);
     }
     return country;
+  }
+
+  async update(id: number, dto: UpdateCountryDto): Promise<Country> {
+    const country = await this.countryRepository.findOne({
+      where: { country_id: id },
+    });
+
+    if (!country) {
+      throw new NotFoundException(`Country with id ${id} does not exist`);
+    }
+
+    if (dto.continent_id !== undefined) {
+      const continent = await this.continentRepository.findOne({
+        where: { continent_id: dto.continent_id },
+      });
+      if (!continent) {
+        throw new NotFoundException(
+          `Continent with id ${dto.continent_id} does not exist`,
+        );
+      }
+      country.continent = continent;
+    }
+
+    if (dto.name && dto.name !== country.name) {
+      const name_checker = await this.countryRepository.findOne({
+        where: { name: dto.name },
+      });
+      if (name_checker) {
+        throw new ConflictException(
+          `Country with this ${dto.name} already exists`,
+        );
+      }
+    }
+    const { continent_id: _, ...fieldsToUpdate } = dto;
+    Object.assign(country, fieldsToUpdate);
+    return await this.countryRepository.save(country);
   }
 }

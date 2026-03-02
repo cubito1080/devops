@@ -23,7 +23,7 @@ export class ContinentService {
 
     if (checker) {
       throw new ConflictException(
-        \Continent with this \ already exists\,
+        `Continent with this ${dto.name} already exists`,
       );
     }
     const continent = this.continentRepository.create(dto);
@@ -41,7 +41,7 @@ export class ContinentService {
     });
 
     if (!continent) {
-      throw new NotFoundException(\Continent with id \ does not exist\);
+      throw new NotFoundException(`Continent with id ${id} does not exist`);
     }
     return continent;
   }
@@ -51,7 +51,7 @@ export class ContinentService {
       where: { continent_id: id },
     });
     if (!continent) {
-      throw new NotFoundException(\Continent with id \ does not exist\);
+      throw new NotFoundException(`Continent with id ${id} does not exist`);
     }
 
     if (dto.name && dto.name !== continent.name) {
@@ -60,7 +60,7 @@ export class ContinentService {
       });
       if (checker) {
         throw new ConflictException(
-          \Continent with this \ already exists\,
+          `Continent with this ${dto.name} already exists`,
         );
       }
     }
@@ -73,6 +73,6 @@ export class ContinentService {
 
     await this.continentRepository.delete(id);
 
-    return { message: \Continent with id \ has been deleted\ };
+    return { message: `Continent with id ${id} has been deleted` };
   }
 }

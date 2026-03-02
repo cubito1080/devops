@@ -77,32 +77,3 @@ export class ContinentController {
     return this.continentService.remove(id);
   }
 }
-
-  @Post()
-  create(@Body() dto: CreateContinentDto): Promise<Continent> {
-    return this.continentService.create(dto);
-  }
-
-  @Get()
-  findAll(): Promise<Continent[]> {
-    return this.continentService.findAll();
-  }
-
-  @Get(':id')
-  findOne(@Param('id', ParseIntPipe) id: number): Promise<Continent> {
-    return this.continentService.findOne(id);
-  }
-
-  @Put(':id')
-  update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateContinentDto,
-  ): Promise<Continent> {
-    return this.continentService.update(id, dto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number): Promise<{ message: string }> {
-    return this.continentService.remove(id);
-  }
-}

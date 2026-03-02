@@ -48,4 +48,15 @@ export class CityService {
   async findAll(): Promise<City[]> {
     return await this.cityRepository.find({ relations: ['country'] });
   }
+
+  async findOne(id: number): Promise<City> {
+    const city = await this.cityRepository.findOne({
+      where: { city_id: id },
+      relations: ['country'],
+    });
+    if (!city) {
+      throw new NotFoundException(`City with id ${id} does not exist`);
+    }
+    return city;
+  }
 }

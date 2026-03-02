@@ -1,5 +1,6 @@
 ﻿import {
   Controller,
+  Get,
   Post,
   Body,
   ParseIntPipe,
@@ -15,5 +16,10 @@ export class CountryController {
   @Post()
   create(@Body() dto: CreateCountryDto): Promise<Country> {
     return this.countryService.create(dto);
+  }
+
+  @Get()
+  findAll(): Promise<Country[]> {
+    return this.countryService.findAll();
   }
 }

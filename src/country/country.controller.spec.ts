@@ -50,9 +50,7 @@ describe('CountryController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [CountryController],
-      providers: [
-        { provide: CountryService, useFactory: mockCountryService },
-      ],
+      providers: [{ provide: CountryService, useFactory: mockCountryService }],
     }).compile();
 
     controller = module.get<CountryController>(CountryController);
@@ -158,7 +156,9 @@ describe('CountryController', () => {
         new NotFoundException('Country with id 99 does not exist'),
       );
 
-      await expect(controller.update(99, {})).rejects.toThrow(NotFoundException);
+      await expect(controller.update(99, {})).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should propagate ConflictException from service', async () => {

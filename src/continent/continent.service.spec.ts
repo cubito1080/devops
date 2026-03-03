@@ -88,7 +88,10 @@ describe('ContinentService', () => {
 
   describe('findAll', () => {
     it('should return an array of continents', async () => {
-      const list = [mockContinent(), { ...mockContinent(), continent_id: 2, name: 'Asia' }];
+      const list = [
+        mockContinent(),
+        { ...mockContinent(), continent_id: 2, name: 'Asia' },
+      ];
       repo.find.mockResolvedValue(list);
 
       const result = await service.findAll();
@@ -146,8 +149,8 @@ describe('ContinentService', () => {
       const continent = mockContinent();
       // first findOne for existence check, second for name-conflict check
       repo.findOne
-        .mockResolvedValueOnce(continent)   // existence check
-        .mockResolvedValueOnce(null);        // name conflict check → no conflict
+        .mockResolvedValueOnce(continent) // existence check
+        .mockResolvedValueOnce(null); // name conflict check → no conflict
 
       repo.save.mockResolvedValue({ ...continent, name: 'Eurasia' });
 
@@ -158,10 +161,14 @@ describe('ContinentService', () => {
 
     it('should throw ConflictException when new name is already taken', async () => {
       const continent = mockContinent();
-      const conflicting = { ...mockContinent(), continent_id: 2, name: 'Eurasia' };
+      const conflicting = {
+        ...mockContinent(),
+        continent_id: 2,
+        name: 'Eurasia',
+      };
 
       repo.findOne
-        .mockResolvedValueOnce(continent)    // existence check
+        .mockResolvedValueOnce(continent) // existence check
         .mockResolvedValueOnce(conflicting); // name conflict check → conflict
 
       await expect(service.update(1, { name: 'Eurasia' })).rejects.toThrow(
@@ -199,7 +206,9 @@ describe('ContinentService', () => {
       const result = await service.remove(1);
 
       expect(repo.delete).toHaveBeenCalledWith(1);
-      expect(result).toEqual({ message: 'Continent with id 1 has been deleted' });
+      expect(result).toEqual({
+        message: 'Continent with id 1 has been deleted',
+      });
     });
 
     it('should throw NotFoundException when continent does not exist', async () => {

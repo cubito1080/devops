@@ -166,7 +166,9 @@ describe('CityController', () => {
         new NotFoundException('City with id 99 does not exist'),
       );
 
-      await expect(controller.update(99, {})).rejects.toThrow(NotFoundException);
+      await expect(controller.update(99, {})).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should propagate ConflictException from service', async () => {
@@ -174,9 +176,9 @@ describe('CityController', () => {
         new ConflictException('City with name "Abuja" already exists'),
       );
 
-      await expect(controller.update(1, { city_name: 'Abuja' })).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(
+        controller.update(1, { city_name: 'Abuja' }),
+      ).rejects.toThrow(ConflictException);
     });
   });
 

@@ -234,8 +234,8 @@ describe('CountryService', () => {
     it('should update name when new name is available', async () => {
       const country = mockCountry();
       countryRepo.findOne
-        .mockResolvedValueOnce(country)  // findOne for country
-        .mockResolvedValueOnce(null);    // name conflict check
+        .mockResolvedValueOnce(country) // findOne for country
+        .mockResolvedValueOnce(null); // name conflict check
 
       countryRepo.save.mockResolvedValue({ ...country, name: 'Ghana' });
 

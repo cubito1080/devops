@@ -15,7 +15,7 @@ const isDevelopment = process.env.NODE_ENV !== 'production';
     TypeOrmModule.forRoot({
       type: 'postgres',
       url: process.env.DATABASE_URL,
-      ssl: isDevelopment ? false : { rejectUnauthorized: false },
+      ssl: { rejectUnauthorized: false },
       autoLoadEntities: true,
       synchronize: isDevelopment,
     }),

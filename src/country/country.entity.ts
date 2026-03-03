@@ -12,7 +12,7 @@ export class Country {
   @PrimaryGeneratedColumn()
   country_id!: number;
 
-  @ManyToOne(() => Continent)
+  @ManyToOne(() => Continent, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'continent_id' })
   continent!: Continent;
 

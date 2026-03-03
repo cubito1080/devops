@@ -17,7 +17,7 @@ const isDevelopment = process.env.NODE_ENV !== 'production';
       url: process.env.DATABASE_URL,
       ssl: { rejectUnauthorized: false },
       autoLoadEntities: true,
-      synchronize: isDevelopment,
+      synchronize: true,
     }),
     ContinentModule,
     CityModule,

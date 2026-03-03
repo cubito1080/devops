@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ContinentModule } from './continent/continent.module';
@@ -6,17 +7,17 @@ import { CityModule } from './city/city.module';
 import { CountryModule } from './country/country.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+const isDevelopment = process.env.NODE_ENV !== 'production';
+
 @Module({
   imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRoot({
       type: 'postgres',
-      host: 'localhost',
-      port: 5433,
-      username: 'jero',
-      password: '123',
-      database: 'geography_db',
-      entities: [__dirname + '/**/*.entity{.ts,.js}'],
-      synchronize: true,
+      url: process.env.DATABASE_URL,
+      ssl: isDevelopment ? false : { rejectUnauthorized: false },
+      autoLoadEntities: true,
+      synchronize: isDevelopment,
     }),
     ContinentModule,
     CityModule,

@@ -50,20 +50,3 @@ jobs:
           COVERAGE=$(npx jest --coverage --coverageReporters=json-summary 2>/dev/null | grep -oP '"pct":\K[0-9.]+' | head -1)
           echo "Coverage: $COVERAGE%"
           node -e "if (parseFloat('$COVERAGE') < 85) { console.error('Coverage below 85%'); process.exit(1); }"
-
-  deploy:
-    name: Deploy to Railway (production)
-    runs-on: ubuntu-latest
-    needs: test
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
-      - name: Deploy to Railway
-        run: railway up --service devops-production-aa8f
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_PROD }}

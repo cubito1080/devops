@@ -49,7 +49,7 @@ jobs:
         run: |
           COVERAGE=$(npx jest --coverage --coverageReporters=json-summary 2>/dev/null | grep -oP '"pct":\K[0-9.]+' | head -1)
           echo "Coverage: $COVERAGE%"
-          node -e "if (parseFloat('$COVERAGE') < 85) { console.error('Coverage below 85%'); process.exit(1); }"
+          node -e "if (parseFloat('$COVERAGE') < 99) { console.error('Coverage below 99%'); process.exit(1); }"
 
   deploy:
     name: Deploy to Railway (Production)

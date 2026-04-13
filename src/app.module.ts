@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 import { ContinentModule } from './continent/continent.module';
 import { CityModule } from './city/city.module';
 import { CountryModule } from './country/country.module';
+import { ChainModule } from './chain/chain.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 const isDevelopment = process.env.NODE_ENV !== 'production';
@@ -22,6 +23,7 @@ const isDevelopment = process.env.NODE_ENV !== 'production';
     ContinentModule,
     CityModule,
     CountryModule,
+    ChainModule,
   ],
   controllers: [AppController],
   providers: [AppService],

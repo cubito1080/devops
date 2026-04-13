@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: geography-api
+  namespace: geography-api
+  labels:
+    app: geography-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: geography-api
+  template:
+    metadata:
+      labels:
+        app: geography-api
+    spec:
+      containers:
+        - name: geography-api
+          # Replaced at build time by buildspec.yml via sed
+          image: IMAGE_URI_PLACEHOLDER
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "3000"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: geography-api-secret
+                  key: DATABASE_URL
+          readinessProbe:
+            httpGet:
+              path: /api
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api
+              port: 3000
+            initialDelaySeconds: 20
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"

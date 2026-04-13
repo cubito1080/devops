@@ -6,16 +6,24 @@ import { City } from './city/city.entity';
 
 // ─── Connection ────────────────────────────────────────────────────────────────
 
-const AppDataSource = new DataSource({
-  type: 'postgres',
-  host: 'localhost',
-  port: 5433,
-  username: 'jero',
-  password: '123',
-  database: 'geography_db',
-  entities: [Continent, Country, City],
-  synchronize: true,
-});
+const AppDataSource = process.env.DATABASE_URL
+  ? new DataSource({
+      type: 'postgres',
+      url: process.env.DATABASE_URL,
+      entities: [Continent, Country, City],
+      synchronize: true,
+      ssl: { rejectUnauthorized: false },
+    })
+  : new DataSource({
+      type: 'postgres',
+      host: 'localhost',
+      port: 5433,
+      username: 'jero',
+      password: '123',
+      database: 'geography_db',
+      entities: [Continent, Country, City],
+      synchronize: true,
+    });
 
 // ─── Seed data ─────────────────────────────────────────────────────────────────
 

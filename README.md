@@ -2,11 +2,14 @@
 
 A RESTful API built with **NestJS**, **TypeORM**, and **PostgreSQL** for managing geographical data across three domain layers: **Continents**, **Countries**, and **Cities**.
 
+Version **v2** introduces versioned routes (`/api/v2/...`) and a **API Chaining** endpoint (`POST /api/v2/chain`) that enables linked-list style payload enrichment across multiple microservices.
+
 ---
 
 ## 📑 Table of Contents
 
 - [Overview](#overview)
+- [Architecture](#architecture)
 - [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
 - [Domain Model](#domain-model)
@@ -17,17 +20,22 @@ A RESTful API built with **NestJS**, **TypeORM**, and **PostgreSQL** for managin
   - [CreateContinentDto](#createcontinentdto)
   - [CreateCityDto](#createcitydto)
 - [API Endpoints](#api-endpoints)
-  - [Continents](#continents-controller)
-  - [Countries](#countries-controller)
-  - [Cities](#cities-controller)
+  - [v1 — Continents](#continents-controller)
+  - [v1 — Countries](#countries-controller)
+  - [v1 — Cities](#cities-controller)
+  - [v2 — Continents](#continents-v2)
+  - [v2 — Countries](#countries-v2)
+  - [v2 — Cities](#cities-v2)
+  - [v2 — Chain](#chain-v2)
+- [Chain Payload Format](#chain-payload-format)
 - [Database](#database)
+- [AWS Deployment (EKS)](#aws-deployment-eks)
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
   - [Environment Variables](#environment-variables)
   - [Start the Database](#start-the-database)
   - [Run the Application](#run-the-application)
-- [Testing](#testing)
 - [Linting & Formatting](#linting--formatting)
 - [Scripts Reference](#scripts-reference)
 
@@ -44,6 +52,62 @@ Continent
 ```
 
 Each layer stores rich domain-specific data such as geological composition, economic indicators, political systems, and demographic statistics.
+
+---
+
+## Architecture
+
+### Multicloud API Chain
+
+The v2 `chain` endpoint implements a **linked-list style API chaining** pattern. Each service in the chain enriches the shared payload with its own domain data and forwards it to the next service.
+
+```mermaid
+flowchart LR
+    Client -->|POST /api/v2/chain| GeoAPI
+
+    subgraph AWS["☁️ AWS — EKS Cluster (us-east-1)"]
+        subgraph K8s["Kubernetes (EKS)"]
+            GeoAPI["🌍 Geography API\n(NestJS)\n/api/v2/chain"]
+        end
+        ECR["🐳 ECR\nContainer Registry"]
+        CodePipeline["🔄 CodePipeline\nCI/CD"]
+        CodeBuild["🔨 CodeBuild\nbuildspec.yml"]
+        RDS["🗄️ RDS / Aurora\nPostgreSQL"]
+        CodePipeline --> CodeBuild --> ECR --> K8s
+        K8s --> RDS
+    end
+
+    subgraph Azure["☁️ Azure"]
+        SupportAPI["🛠️ Support API\n/api/v2/chain"]
+    end
+
+    subgraph GCP["☁️ Google Cloud"]
+        SportsAPI["⚽ Sports API\n/api/v2/chain"]
+    end
+
+    GeoAPI -->|meta.siguiente| SupportAPI
+    SupportAPI -->|meta.siguiente| SportsAPI
+    SportsAPI -->|meta.siguiente = null — final response| Client
+```
+
+### Chain Flow
+
+1. **Client** sends `POST /api/v2/chain` with an optional `meta.siguiente` URL
+2. **Geography API** (this repo) fetches continent + country + city from the DB and embeds them in the payload
+3. Updates `meta`: `antes = meta.origen`, `origen = "api-geografia"`, `siguiente` unchanged
+4. If `meta.siguiente` is set → **forwards** the enriched payload via HTTP POST to that URL
+5. The next API repeats the same pattern, accumulating data
+6. When `meta.siguiente = null` the final API returns the complete chained payload to the original caller
+
+### AWS Deployment Overview
+
+| Component | Service |
+|---|---|
+| Container Registry | Amazon ECR |
+| Kubernetes cluster | Amazon EKS (3 replicas) |
+| CI/CD pipeline | AWS CodePipeline + CodeBuild |
+| Database | Amazon RDS PostgreSQL (or Aurora) |
+| Ingress | AWS Load Balancer Controller (ALB) |
 
 ---
 
@@ -274,6 +338,155 @@ Base path: `/cities`
 
 ---
 
+### Continents v2
+
+Base path: `/api/v2/continents`
+
+| Method   | Path                       | Description                         |
+|----------|----------------------------|-------------------------------------|
+| `GET`    | `/api/v2/continents`       | Return all continents               |
+| `GET`    | `/api/v2/continents/:id`   | Return a single continent by ID     |
+| `POST`   | `/api/v2/continents`       | Create a new continent              |
+| `PATCH`  | `/api/v2/continents/:id`   | Partial update of a continent       |
+| `PUT`    | `/api/v2/continents/:id`   | Replace a continent by ID           |
+| `DELETE` | `/api/v2/continents/:id`   | Delete a continent by ID            |
+
+---
+
+### Countries v2
+
+Base path: `/api/v2/countries`
+
+| Method   | Path                      | Description                       |
+|----------|---------------------------|-----------------------------------|
+| `GET`    | `/api/v2/countries`       | Return all countries              |
+| `GET`    | `/api/v2/countries/:id`   | Return a single country by ID     |
+| `POST`   | `/api/v2/countries`       | Create a new country              |
+| `PATCH`  | `/api/v2/countries/:id`   | Partial update of a country       |
+| `PUT`    | `/api/v2/countries/:id`   | Replace a country by ID           |
+| `DELETE` | `/api/v2/countries/:id`   | Delete a country by ID            |
+
+---
+
+### Cities v2
+
+Base path: `/api/v2/cities`
+
+| Method   | Path                   | Description                   |
+|----------|------------------------|-------------------------------|
+| `GET`    | `/api/v2/cities`       | Return all cities             |
+| `GET`    | `/api/v2/cities/:id`   | Return a single city by ID    |
+| `POST`   | `/api/v2/cities`       | Create a new city             |
+| `PATCH`  | `/api/v2/cities/:id`   | Partial update of a city      |
+| `PUT`    | `/api/v2/cities/:id`   | Replace a city by ID          |
+| `DELETE` | `/api/v2/cities/:id`   | Delete a city by ID           |
+
+---
+
+### Chain v2
+
+| Method | Path              | Description                                                   |
+|--------|-------------------|---------------------------------------------------------------|
+| `POST` | `/api/v2/chain`   | Enrich payload with geo data and forward to next API in chain |
+
+---
+
+## Chain Payload Format
+
+### Request body
+
+```json
+{
+  "meta": {
+    "antes": null,
+    "origen": "client",
+    "siguiente": "https://support-api.example.com/api/v2/chain"
+  },
+  "continent_id": 1,
+  "country_id": 1,
+  "city_id": 1
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `meta.antes` | `string \| null` | Name/URL of the previous API (set automatically) |
+| `meta.origen` | `string` | Name of the current API origin |
+| `meta.siguiente` | `string \| null` | URL to forward to, or `null` to end the chain |
+| `continent_id` | `number` (optional) | Pick a specific continent; falls back to first in DB |
+| `country_id` | `number` (optional) | Pick a specific country; falls back to first in DB |
+| `city_id` | `number` (optional) | Pick a specific city; falls back to first in DB |
+
+### Response (when `siguiente = null`)
+
+The enriched payload is returned directly:
+
+```json
+{
+  "meta": {
+    "antes": "client",
+    "origen": "api-geografia",
+    "siguiente": null
+  },
+  "continent": { ... },
+  "country": { ... },
+  "city": { ... }
+}
+```
+
+When `meta.siguiente` is set, this API POSTs the enriched payload to that URL and returns whatever the downstream API ultimately responds with.
+
+---
+
+## AWS Deployment (EKS)
+
+The application is deployed to **Amazon EKS** via **AWS CodePipeline + CodeBuild**.
+
+### Pipeline Flow
+
+```
+GitHub repo push
+  → AWS CodePipeline (source stage)
+  → AWS CodeBuild (buildspec.yml)
+      ├── docker build + docker push → ECR
+      └── kubectl apply k8s/ → EKS cluster
+```
+
+### Required AWS Setup (manual — no Terraform/CDK)
+
+1. **ECR repository**: Create a private repo named `geography-api`
+2. **EKS cluster**: Create a cluster named `geography-cluster` (or update `EKS_CLUSTER_NAME` in `buildspec.yml`)
+3. **CodeBuild IAM role**: Attach `AmazonEKSWorkerNodePolicy`, `AmazonEC2ContainerRegistryPowerUser`, and `eks:DescribeCluster`
+4. **EKS aws-auth**: Add the CodeBuild IAM role to the cluster's `aws-auth` ConfigMap
+5. **K8s Secret**: Create the database credentials secret before first deploy:
+   ```bash
+   kubectl create secret generic geography-api-secret \
+     --namespace=geography-api \
+     --from-literal=DATABASE_URL='postgres://user:password@host:5432/dbname'
+   ```
+6. **AWS Load Balancer Controller**: Install in the cluster for Ingress/ALB support
+
+### CodeBuild Environment Variables
+
+| Variable | Description |
+|---|---|
+| `AWS_ACCOUNT_ID` | Your 12-digit AWS account ID |
+| `AWS_DEFAULT_REGION` | e.g. `us-east-1` |
+| `ECR_REPO_NAME` | ECR repository name (default: `geography-api`) |
+| `EKS_CLUSTER_NAME` | EKS cluster name (default: `geography-cluster`) |
+
+### Manual Deploy (kubectl only)
+
+```bash
+# Apply manifests directly
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/deployment.yaml -n geography-api
+kubectl apply -f k8s/service.yaml -n geography-api
+kubectl apply -f k8s/ingress.yaml -n geography-api
+```
+
+---
+
 ## Database
 
 The project uses **PostgreSQL 13** managed through Docker Compose.
@@ -354,24 +567,6 @@ npm run start:prod
 ```
 
 The API will be available at `http://localhost:3000`.
-
----
-
-## Testing
-
-```bash
-# Unit tests
-npm run test
-
-# Unit tests in watch mode
-npm run test:watch
-
-# End-to-end tests
-npm run test:e2e
-
-# Coverage report
-npm run test:cov
-```
 
 ---
 

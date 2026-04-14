@@ -1,4 +1,6 @@
 import 'reflect-metadata';
+import * as dotenv from 'dotenv';
+dotenv.config();
 import { DataSource } from 'typeorm';
 import { Continent } from './continent/continent.entity';
 import { Country } from './country/country.entity';

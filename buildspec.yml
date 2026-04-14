@@ -1,55 +1,8 @@
-version: 0.2
-
-env:
-  variables:
-    AWS_DEFAULT_REGION: "us-east-1"
-    ECR_REPO_NAME: "geography-api"
-    EKS_CLUSTER_NAME: "geography-cluster"
-    K8S_NAMESPACE: "geography-api"
-  # Set AWS_ACCOUNT_ID as a CodeBuild environment variable or parameter store entry
-
-phases:
-  install:
-    runtime-versions:
-      nodejs: 20
-    commands:
-      # Install kubectl
-      - curl -LO "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-      - chmod +x kubectl && mv kubectl /usr/local/bin/
-
-  pre_build:
-    commands:
-      - echo "Logging in to Amazon ECR..."
-      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
-      - IMAGE_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_REPO_NAME
-      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c1-7)
-      - IMAGE_TAG=${COMMIT_HASH:-latest}
-      - echo "Updating kubeconfig for EKS cluster $EKS_CLUSTER_NAME..."
-      - aws eks update-kubeconfig --region $AWS_DEFAULT_REGION --name $EKS_CLUSTER_NAME
-
-  build:
-    commands:
-      - echo "Building Docker image..."
-      - docker build -t $IMAGE_URI:$IMAGE_TAG .
-      - docker tag $IMAGE_URI:$IMAGE_TAG $IMAGE_URI:latest
-
-  post_build:
-    commands:
-      - echo "Pushing image to ECR..."
-      - docker push $IMAGE_URI:$IMAGE_TAG
-      - docker push $IMAGE_URI:latest
-      - echo "Updating deployment image in k8s manifests..."
-      - sed -i "s|IMAGE_URI_PLACEHOLDER|$IMAGE_URI:$IMAGE_TAG|g" k8s/deployment.yaml
-      - echo "Applying Kubernetes manifests..."
-      - kubectl apply -f k8s/namespace.yaml
-      - kubectl apply -f k8s/secret.yaml --namespace=$K8S_NAMESPACE || true
-      - kubectl apply -f k8s/deployment.yaml --namespace=$K8S_NAMESPACE
-      - kubectl apply -f k8s/service.yaml --namespace=$K8S_NAMESPACE
-      - kubectl apply -f k8s/ingress.yaml --namespace=$K8S_NAMESPACE
-      - kubectl rollout status deployment/geography-api --namespace=$K8S_NAMESPACE --timeout=120s
-      - echo "Deployment complete."
-
-artifacts:
-  files:
-    - k8s/**/*
-    - buildspec.yml
+# ⚠️  DEPRECATED — This project has migrated from AWS to Google Cloud Platform.
+#
+# This file (AWS CodeBuild buildspec) is no longer used.
+# The active CI/CD pipeline configuration is:
+#
+#   cloudbuild.yaml  ← Cloud Build (GCP equivalent of CodeBuild)
+#
+# You can safely delete this file once the GCP pipeline is confirmed working.

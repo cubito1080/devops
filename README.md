@@ -29,7 +29,7 @@ Version **v2** introduces versioned routes (`/api/v2/...`) and a **API Chaining*
   - [v2 — Chain](#chain-v2)
 - [Chain Payload Format](#chain-payload-format)
 - [Database](#database)
-- [AWS Deployment (EKS)](#aws-deployment-eks)
+- [GCP Deployment (GKE)](#gcp-deployment-gke)
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
@@ -65,23 +65,22 @@ The v2 `chain` endpoint implements a **linked-list style API chaining** pattern.
 flowchart LR
     Client -->|POST /api/v2/chain| GeoAPI
 
-    subgraph AWS["☁️ AWS — EKS Cluster (us-east-1)"]
-        subgraph K8s["Kubernetes (EKS)"]
+    subgraph GCP_own["☁️ GCP — GKE Cluster (us-central1)"]
+        subgraph K8s["Kubernetes (GKE)"]
             GeoAPI["🌍 Geography API\n(NestJS)\n/api/v2/chain"]
         end
-        ECR["🐳 ECR\nContainer Registry"]
-        CodePipeline["🔄 CodePipeline\nCI/CD"]
-        CodeBuild["🔨 CodeBuild\nbuildspec.yml"]
-        RDS["🗄️ RDS / Aurora\nPostgreSQL"]
-        CodePipeline --> CodeBuild --> ECR --> K8s
-        K8s --> RDS
+        ArtifactReg["🐳 Artifact Registry\nContainer Registry"]
+        CloudBuild["🔨 Cloud Build\ncloudbuild.yaml"]
+        CloudSQL["🗄️ Cloud SQL\nPostgreSQL"]
+        CloudBuild --> ArtifactReg --> K8s
+        K8s --> CloudSQL
     end
 
     subgraph Azure["☁️ Azure"]
         SupportAPI["🛠️ Support API\n/api/v2/chain"]
     end
 
-    subgraph GCP["☁️ Google Cloud"]
+    subgraph GCP_other["☁️ Google Cloud (peer)"]
         SportsAPI["⚽ Sports API\n/api/v2/chain"]
     end
 
@@ -99,15 +98,15 @@ flowchart LR
 5. The next API repeats the same pattern, accumulating data
 6. When `meta.siguiente = null` the final API returns the complete chained payload to the original caller
 
-### AWS Deployment Overview
+### GCP Deployment Overview
 
-| Component | Service |
+| Component | GCP Service |
 |---|---|
-| Container Registry | Amazon ECR |
-| Kubernetes cluster | Amazon EKS (3 replicas) |
-| CI/CD pipeline | AWS CodePipeline + CodeBuild |
-| Database | Amazon RDS PostgreSQL (or Aurora) |
-| Ingress | AWS Load Balancer Controller (ALB) |
+| Container Registry | Artifact Registry |
+| Kubernetes cluster | GKE — Google Kubernetes Engine (3 replicas) |
+| CI/CD pipeline | Cloud Build (`cloudbuild.yaml`) |
+| Database | Cloud SQL for PostgreSQL |
+| Public access | GKE `LoadBalancer` Service — GKE provisions a public IP automatically |
 
 ---
 
@@ -438,51 +437,165 @@ When `meta.siguiente` is set, this API POSTs the enriched payload to that URL an
 
 ---
 
-## AWS Deployment (EKS)
+## GCP Deployment (GKE)
 
-The application is deployed to **Amazon EKS** via **AWS CodePipeline + CodeBuild**.
+The application is deployed to **Google Kubernetes Engine (GKE)** via **Cloud Build**.
+
+> **New to GCP?** Think of it this way:
+> - **Google Cloud Project** = your billing/resource container (like an AWS account)
+> - **Artifact Registry** = where Docker images are stored (like ECR)
+> - **GKE** = managed Kubernetes cluster (like EKS)
+> - **Cloud Build** = runs your pipeline when you push code (like CodePipeline + CodeBuild merged into one)
+> - **Cloud SQL** = managed PostgreSQL database (like RDS)
 
 ### Pipeline Flow
 
 ```
 GitHub repo push
-  → AWS CodePipeline (source stage)
-  → AWS CodeBuild (buildspec.yml)
-      ├── docker build + docker push → ECR
-      └── kubectl apply k8s/ → EKS cluster
+  → Cloud Build trigger fires (cloudbuild.yaml)
+      ├── docker build + docker push → Artifact Registry
+      └── kubectl apply k8s/ → GKE cluster
 ```
 
-### Required AWS Setup (manual — no Terraform/CDK)
+### Step-by-step GCP Setup (one time only)
 
-1. **ECR repository**: Create a private repo named `geography-api`
-2. **EKS cluster**: Create a cluster named `geography-cluster` (or update `EKS_CLUSTER_NAME` in `buildspec.yml`)
-3. **CodeBuild IAM role**: Attach `AmazonEKSWorkerNodePolicy`, `AmazonEC2ContainerRegistryPowerUser`, and `eks:DescribeCluster`
-4. **EKS aws-auth**: Add the CodeBuild IAM role to the cluster's `aws-auth` ConfigMap
-5. **K8s Secret**: Create the database credentials secret before first deploy:
-   ```bash
-   kubectl create secret generic geography-api-secret \
-     --namespace=geography-api \
-     --from-literal=DATABASE_URL='postgres://user:password@host:5432/dbname'
-   ```
-6. **AWS Load Balancer Controller**: Install in the cluster for Ingress/ALB support
+#### 1. Create a GCP Project
+1. Go to [console.cloud.google.com](https://console.cloud.google.com)
+2. Click the project dropdown (top bar) → **New Project**
+3. Give it a name (e.g. `geography-api`) and note the **Project ID** — you'll use this everywhere
+4. Enable billing on the project
 
-### CodeBuild Environment Variables
+#### 2. Enable required APIs
+In the GCP console, navigate to **APIs & Services → Library** and enable:
+- **Artifact Registry API**
+- **Kubernetes Engine API**
+- **Cloud Build API**
+- **Cloud SQL Admin API** (if using Cloud SQL)
 
-| Variable | Description |
-|---|---|
-| `AWS_ACCOUNT_ID` | Your 12-digit AWS account ID |
-| `AWS_DEFAULT_REGION` | e.g. `us-east-1` |
-| `ECR_REPO_NAME` | ECR repository name (default: `geography-api`) |
-| `EKS_CLUSTER_NAME` | EKS cluster name (default: `geography-cluster`) |
+Or enable all at once with the CLI:
+```bash
+gcloud services enable \
+  artifactregistry.googleapis.com \
+  container.googleapis.com \
+  cloudbuild.googleapis.com \
+  sqladmin.googleapis.com
+```
 
-### Manual Deploy (kubectl only)
+#### 3. Create the Artifact Registry repository
+This is where your Docker images will be stored.
+```bash
+gcloud artifacts repositories create geography-api \
+  --repository-format=docker \
+  --location=us-central1 \
+  --description="Geography API images"
+```
+
+The image URI will be:
+`us-central1-docker.pkg.dev/YOUR_PROJECT_ID/geography-api/geography-api`
+
+#### 4. Create the GKE cluster
+```bash
+gcloud container clusters create geography-cluster \
+  --region=us-central1 \
+  --num-nodes=1 \
+  --machine-type=e2-medium
+```
+
+> `--num-nodes=1` creates 1 node **per zone** in the region (3 zones = 3 nodes total). The Deployment requests 3 replicas which will spread across them.
+
+#### 5. Grant Cloud Build permission to deploy to GKE
+Cloud Build runs as a service account. You need to give it permission to push images and deploy to the cluster.
 
 ```bash
-# Apply manifests directly
+# Find your Cloud Build service account email:
+# It looks like: PROJECT_NUMBER@cloudbuild.gserviceaccount.com
+PROJECT_NUMBER=$(gcloud projects describe YOUR_PROJECT_ID --format='value(projectNumber)')
+
+# Grant Kubernetes Developer role
+gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+  --member="serviceAccount:$PROJECT_NUMBER@cloudbuild.gserviceaccount.com" \
+  --role="roles/container.developer"
+
+# Grant Artifact Registry Writer role
+gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+  --member="serviceAccount:$PROJECT_NUMBER@cloudbuild.gserviceaccount.com" \
+  --role="roles/artifactregistry.writer"
+```
+
+#### 6. Create the database secret in the cluster
+Before the first deploy, create the Kubernetes secret that holds the database connection string.
+
+```bash
+# First, point kubectl at your GKE cluster:
+gcloud container clusters get-credentials geography-cluster \
+  --region=us-central1 \
+  --project=YOUR_PROJECT_ID
+
+# Create the namespace first:
+kubectl apply -f k8s/namespace.yaml
+
+# Create the secret:
+kubectl create secret generic geography-api-secret \
+  --namespace=geography-api \
+  --from-literal=DATABASE_URL='postgresql://USER:PASSWORD@HOST:5432/geography_db'
+```
+
+For **Cloud SQL**, the connection string uses the Cloud SQL Auth Proxy socket format:
+```
+postgresql://USER:PASSWORD@/geography_db?host=/cloudsql/PROJECT_ID:us-central1:INSTANCE_NAME
+```
+
+#### 7. Connect Cloud Build to your GitHub repo
+1. In GCP Console → **Cloud Build → Triggers**
+2. Click **Connect Repository** → choose GitHub → authenticate → select this repo
+3. Click **Create Trigger** with these settings:
+   - **Event**: Push to a branch
+   - **Branch**: `^main$` (or `^master$`)
+   - **Build configuration**: `cloudbuild.yaml`
+4. Under **Substitution variables**, add:
+
+| Variable | Value |
+|---|---|
+| `_REGION` | `us-central1` |
+| `_REPO_NAME` | `geography-api` |
+| `_GKE_CLUSTER` | `geography-cluster` |
+| `_GKE_REGION` | `us-central1` |
+
+From this point on, every push to the branch triggers a full build + deploy automatically.
+
+### Manual Deploy (kubectl only, no Cloud Build)
+
+If you want to deploy manually without the pipeline:
+
+```bash
+# 1. Point kubectl at the cluster (run once per machine)
+gcloud container clusters get-credentials geography-cluster \
+  --region=us-central1 \
+  --project=YOUR_PROJECT_ID
+
+# 2. Build and push the image yourself
+docker build -t us-central1-docker.pkg.dev/YOUR_PROJECT_ID/geography-api/geography-api:latest .
+docker push us-central1-docker.pkg.dev/YOUR_PROJECT_ID/geography-api/geography-api:latest
+
+# 3. Apply manifests (no Ingress needed)
 kubectl apply -f k8s/namespace.yaml
 kubectl apply -f k8s/deployment.yaml -n geography-api
 kubectl apply -f k8s/service.yaml -n geography-api
-kubectl apply -f k8s/ingress.yaml -n geography-api
+
+# 4. Check that everything is running
+kubectl get pods -n geography-api
+kubectl get service geography-api -n geography-api   # shows the public IP
+```
+
+### Get the public URL after deploy
+
+```bash
+# The EXTERNAL-IP column shows the load balancer IP (may take 1-2 minutes to appear)
+kubectl get service geography-api -n geography-api
+
+# Once you have the IP, hit your API on port 80:
+curl http://EXTERNAL_IP/continents
+curl http://EXTERNAL_IP/api/v2/continents
 ```
 
 ---
@@ -514,59 +627,176 @@ TypeORM is configured to synchronise the schema automatically in development (`s
 
 ### Prerequisites
 
-- Node.js ≥ 20
-- Docker & Docker Compose
-- WSL2 (if on Windows) or a Unix-compatible shell
+| Tool | Minimum version | Notes |
+|---|---|---|
+| Node.js | 20 | `node -v` to verify |
+| npm | 10 | bundled with Node 20 |
+| Docker Desktop | any recent | Docker Compose v2 required |
+| WSL2 | — | Windows only, needed for the seed script |
 
 ---
 
-### Installation
+### Option A — Full Docker Stack (recommended for peers)
+
+Run the database **and** the application inside Docker. No local Node.js install required beyond seeding.
+
+**1. Clone and enter the repo**
 
 ```bash
-npm install
+git clone <repo-url>
+cd devops
 ```
 
----
-
-### Environment Variables
-
-Create a `.env` file at the project root (not committed to source control):
-
-```env
-DB_HOST=localhost
-DB_PORT=5433
-DB_USER=jero
-DB_PASSWORD=123
-DB_NAME=geography_db
-```
-
----
-
-### Start the Database
+**2. Start all containers**
 
 ```bash
 docker compose up -d
 ```
 
-This starts the PostgreSQL container on host port `5433`.
+This builds the app image and starts two containers:
+
+| Container | Service | Port |
+|---|---|---|
+| `devops-app-1` | NestJS API | `localhost:3000` |
+| `devops-postgres-1` | PostgreSQL 13 | `localhost:5433` |
+
+Wait ~15 seconds for the healthcheck to pass. Verify with:
+
+```bash
+docker compose ps
+# Both containers should show "Up ... (healthy)"
+```
+
+**3. Seed the database**
+
+```bash
+# Linux / macOS
+DATABASE_URL=postgresql://jero:123@localhost:5433/geography_db npm run seed
+
+# Windows (WSL)
+wsl -e bash -c "cd /mnt/c/path/to/devops && DATABASE_URL=postgresql://jero:123@localhost:5433/geography_db npm run seed"
+```
+
+**4. Verify the API is responding**
+
+```bash
+curl http://localhost:3000/continents
+# → JSON array of continents
+
+curl http://localhost:3000/api/v2/continents
+# → same, through the v2 route
+```
+
+**5. Tear down**
+
+```bash
+docker compose down          # stops containers, keeps postgres volume
+docker compose down -v       # stops containers and deletes all data
+```
 
 ---
 
-### Run the Application
+### Option B — Local Development (app outside Docker)
+
+The database runs in Docker, the NestJS app runs locally with hot-reload.
+
+**1. Install dependencies**
 
 ```bash
-# Development
-npm run start
+npm install
+```
 
-# Watch mode (auto-restart on file changes)
+**2. Start only the database**
+
+```bash
+docker compose up -d postgres
+```
+
+**3. Create a `.env` file** at the project root:
+
+```env
+DATABASE_URL=postgresql://jero:123@localhost:5433/geography_db
+NODE_ENV=development
+PORT=3000
+```
+
+> The app reads a single `DATABASE_URL` connection string — individual `DB_*` variables are **not** used.
+
+**4. Seed the database** (first time only)
+
+```bash
+DATABASE_URL=postgresql://jero:123@localhost:5433/geography_db npm run seed
+```
+
+**5. Run the application**
+
+```bash
+# Watch mode — auto-restarts on file changes (recommended)
 npm run start:dev
 
-# Production (requires prior build)
+# Standard start (compiled output)
 npm run build
 npm run start:prod
 ```
 
 The API will be available at `http://localhost:3000`.
+
+---
+
+### Connecting to PostgreSQL directly
+
+If you need to inspect the database with a client (e.g. DBeaver, psql, TablePlus):
+
+| Field | Value |
+|---|---|
+| Host | `localhost` |
+| Port | `5433` |
+| Database | `geography_db` |
+| Username | `jero` |
+| Password | `123` |
+
+```bash
+# psql (if installed locally)
+psql -h localhost -p 5433 -U jero -d geography_db
+
+# psql via Docker
+docker exec -it devops-postgres-1 psql -U jero -d geography_db
+```
+
+---
+
+### Quick smoke test
+
+After seeding, run these to confirm all layers are working:
+
+```bash
+# v1 routes
+curl http://localhost:3000/continents
+curl http://localhost:3000/countries
+curl http://localhost:3000/cities
+
+# v2 CRUD routes
+curl http://localhost:3000/api/v2/continents
+curl http://localhost:3000/api/v2/countries
+curl http://localhost:3000/api/v2/cities
+
+# Chain — terminal node (no forwarding)
+curl -X POST http://localhost:3000/api/v2/chain \
+  -H "Content-Type: application/json" \
+  -d '{"meta":{"antes":null,"origen":"test","siguiente":null}}'
+
+# Chain — specific entities by ID
+curl -X POST http://localhost:3000/api/v2/chain \
+  -H "Content-Type: application/json" \
+  -d '{"meta":{"antes":null,"origen":"test","siguiente":null},"continent_id":1,"country_id":1,"city_id":1}'
+
+# Chain — forwarding to another API (replace URL with the next service)
+curl -X POST http://localhost:3000/api/v2/chain \
+  -H "Content-Type: application/json" \
+  -d '{"meta":{"antes":null,"origen":"test","siguiente":"https://next-api.example.com/api/v2/chain"}}'
+```
+
+> **Windows PowerShell note:** use `curl.exe` instead of `curl`, and use a JSON file (`-d @payload.json`) to avoid quoting issues.
 
 ---
 

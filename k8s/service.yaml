@@ -6,11 +6,13 @@ metadata:
   labels:
     app: geography-api
 spec:
-  type: ClusterIP
+  # LoadBalancer tells GKE to provision a public IP automatically.
+  # No Ingress controller or extra setup required — ideal for academic use.
+  type: LoadBalancer
   selector:
     app: geography-api
   ports:
     - name: http
-      port: 3000
+      port: 80
       targetPort: 3000
       protocol: TCP

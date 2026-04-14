@@ -1,0 +1,99 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Google Cloud Build — CI/CD pipeline
+# Triggered automatically on every push to the connected GitHub repository.
+#
+# What it does (in order):
+#   1. Build the Docker image from the Dockerfile in this repo
+#   2. Push the image to Artifact Registry (GCP's container registry)
+#   3. Inject the real image URI into the Kubernetes deployment manifest
+#   4. Apply all K8s manifests to the GKE cluster
+#
+# Substitution variables — set these when creating the Cloud Build trigger:
+#   _REGION       GCP region where both Artifact Registry and GKE live  (e.g. us-central1)
+#   _REPO_NAME    Artifact Registry repository name                      (e.g. geography-api)
+#   _GKE_CLUSTER  GKE cluster name                                       (e.g. geography-cluster)
+#   _GKE_REGION   GKE cluster region                                     (e.g. us-central1)
+#
+# $PROJECT_ID and $SHORT_SHA are built-in Cloud Build variables —
+# you do NOT need to set them; Cloud Build fills them in automatically.
+# ─────────────────────────────────────────────────────────────────────────────
+
+substitutions:
+  _REGION: us-central1
+  _REPO_NAME: geography-api
+  _GKE_CLUSTER: geography-cluster
+  _GKE_REGION: us-central1
+
+steps:
+  # ── Step 1: Build the Docker image ────────────────────────────────────────
+  # Builds two tags: one with the short commit hash (e.g. :a1b2c3d) for
+  # traceability, and :latest as a convenient floating reference.
+  - name: gcr.io/cloud-builders/docker
+    id: build
+    args:
+      - build
+      - -t
+      - $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO_NAME/geography-api:$SHORT_SHA
+      - -t
+      - $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO_NAME/geography-api:latest
+      - .
+
+  # ── Step 2: Push the image to Artifact Registry ───────────────────────────
+  # --all-tags pushes both :$SHORT_SHA and :latest in a single command.
+  - name: gcr.io/cloud-builders/docker
+    id: push
+    waitFor: [build]
+    args:
+      - push
+      - --all-tags
+      - $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO_NAME/geography-api
+
+  # ── Step 3: Inject the real image URI into the deployment manifest ────────
+  # k8s/deployment.yaml contains the placeholder IMAGE_URI_PLACEHOLDER.
+  # This sed command replaces it with the actual registry path for this build.
+  - name: ubuntu
+    id: patch-manifest
+    waitFor: [push]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        sed -i \
+          "s|IMAGE_URI_PLACEHOLDER|$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO_NAME/geography-api:$SHORT_SHA|g" \
+          k8s/deployment.yaml
+
+  # ── Step 4: Deploy to GKE ─────────────────────────────────────────────────
+  # Uses the official Cloud SDK image which includes both gcloud and kubectl.
+  # gcloud container clusters get-credentials configures kubectl to talk to
+  # your GKE cluster automatically (no manual kubeconfig needed).
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: deploy
+    waitFor: [patch-manifest]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        gcloud container clusters get-credentials $_GKE_CLUSTER \
+          --region $_GKE_REGION \
+          --project $PROJECT_ID
+
+        # Apply the namespace first so it exists before the other resources
+        kubectl apply -f k8s/namespace.yaml
+
+        # Apply the rest of the manifests in the geography-api namespace
+        # (no Ingress needed — the LoadBalancer Service gives a public IP directly)
+        kubectl apply \
+          -f k8s/deployment.yaml \
+          -f k8s/service.yaml \
+          --namespace=geography-api
+
+        # Wait for the rollout to finish (fail the build if it doesn't)
+        kubectl rollout status deployment/geography-api \
+          --namespace=geography-api \
+          --timeout=120s
+
+# Tell Cloud Build which images were produced by this pipeline.
+# These appear in the build history and are kept in Artifact Registry.
+images:
+  - $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO_NAME/geography-api:$SHORT_SHA
+  - $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO_NAME/geography-api:latest

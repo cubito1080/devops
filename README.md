@@ -1,762 +1,666 @@
 # 🌍 Geography API
 
-A RESTful API built with **NestJS**, **TypeORM**, and **PostgreSQL** for managing geographical data across three domain layers: **Continents**, **Countries**, and **Cities**.
+> **Live instance →** `http://35.194.53.58` &nbsp;·&nbsp; **Interactive docs →** `http://35.194.53.58/api`
 
-Version **v2** introduces versioned routes (`/api/v2/...`) and a **API Chaining** endpoint (`POST /api/v2/chain`) that enables linked-list style payload enrichment across multiple microservices.
+![NestJS](https://img.shields.io/badge/NestJS-11-red?logo=nestjs)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-13-blue?logo=postgresql)
+![GKE](https://img.shields.io/badge/GKE-us--central1-blue?logo=googlecloud)
+![Cloud Build](https://img.shields.io/badge/CI%2FCD-Cloud%20Build-orange?logo=googlecloud)
+
+A RESTful API built with **NestJS**, **TypeORM**, and **PostgreSQL** that models the physical and demographic structure of the world through a three-level hierarchy: **Continents → Countries → Cities**.
+
+**v2** introduces versioned routes (`/api/v2/...`) and a **linked-list API chaining** endpoint (`POST /api/v2/chain`) that lets multiple independent microservices pass a payload through a chain — each enriching it with its own domain-specific data.
 
 ---
 
 ## 📑 Table of Contents
 
-- [Overview](#overview)
-- [Architecture](#architecture)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Domain Model](#domain-model)
-  - [Continent](#continent)
-  - [Country](#country)
-  - [City](#city)
-- [Data Transfer Objects (DTOs)](#data-transfer-objects-dtos)
-  - [CreateContinentDto](#createcontinentdto)
-  - [CreateCityDto](#createcitydto)
-- [API Endpoints](#api-endpoints)
-  - [v1 — Continents](#continents-controller)
-  - [v1 — Countries](#countries-controller)
-  - [v1 — Cities](#cities-controller)
-  - [v2 — Continents](#continents-v2)
-  - [v2 — Countries](#countries-v2)
-  - [v2 — Cities](#cities-v2)
-  - [v2 — Chain](#chain-v2)
-- [Chain Payload Format](#chain-payload-format)
-- [Database](#database)
-- [GCP Deployment (GKE)](#gcp-deployment-gke)
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
-  - [Environment Variables](#environment-variables)
-  - [Start the Database](#start-the-database)
-  - [Run the Application](#run-the-application)
-- [Linting & Formatting](#linting--formatting)
-- [Scripts Reference](#scripts-reference)
+- [Live Instance](#-live-instance)
+- [System Architecture](#-system-architecture)
+  - [GCP Deployment Architecture](#gcp-deployment-architecture)
+  - [CI/CD Pipeline](#cicd-pipeline)
+- [Linked-List API Chain](#-linked-list-api-chain)
+  - [Concept](#concept)
+  - [Multi-service Flow](#multi-service-chain-flow)
+  - [How meta evolves](#how-meta-evolves-through-the-chain)
+  - [Request Format](#request-format)
+  - [Integration for Peers](#integration-example-for-peers)
+- [Domain Model](#-domain-model)
+  - [ERD](#entity-relationship-diagram)
+  - [Entities](#entities)
+- [API Endpoints](#-api-endpoints)
+- [Tech Stack](#-tech-stack)
+- [Project Structure](#-project-structure)
+- [Local Development](#-local-development)
+- [GCP Reference](#-gcp-reference)
+- [Scripts](#-scripts)
 
 ---
 
-## Overview
+## 🟢 Live Instance
 
-The Geography API models the physical and demographic structure of the world through a three-level hierarchy:
-
-```
-Continent
-  └── Country  (many-to-one → Continent)
-        └── City  (many-to-one → Country)
-```
-
-Each layer stores rich domain-specific data such as geological composition, economic indicators, political systems, and demographic statistics.
-
----
-
-## Architecture
-
-### Multicloud API Chain
-
-The v2 `chain` endpoint implements a **linked-list style API chaining** pattern. Each service in the chain enriches the shared payload with its own domain data and forwards it to the next service.
-
-```mermaid
-flowchart LR
-    Client -->|POST /api/v2/chain| GeoAPI
-
-    subgraph GCP_own["☁️ GCP — GKE Cluster (us-central1)"]
-        subgraph K8s["Kubernetes (GKE)"]
-            GeoAPI["🌍 Geography API\n(NestJS)\n/api/v2/chain"]
-        end
-        ArtifactReg["🐳 Artifact Registry\nContainer Registry"]
-        CloudBuild["🔨 Cloud Build\ncloudbuild.yaml"]
-        CloudSQL["🗄️ Cloud SQL\nPostgreSQL"]
-        CloudBuild --> ArtifactReg --> K8s
-        K8s --> CloudSQL
-    end
-
-    subgraph Azure["☁️ Azure"]
-        SupportAPI["🛠️ Support API\n/api/v2/chain"]
-    end
-
-    subgraph GCP_other["☁️ Google Cloud (peer)"]
-        SportsAPI["⚽ Sports API\n/api/v2/chain"]
-    end
-
-    GeoAPI -->|meta.siguiente| SupportAPI
-    SupportAPI -->|meta.siguiente| SportsAPI
-    SportsAPI -->|meta.siguiente = null — final response| Client
-```
-
-### Chain Flow
-
-1. **Client** sends `POST /api/v2/chain` with an optional `meta.siguiente` URL
-2. **Geography API** (this repo) fetches continent + country + city from the DB and embeds them in the payload
-3. Updates `meta`: `antes = meta.origen`, `origen = "api-geografia"`, `siguiente` unchanged
-4. If `meta.siguiente` is set → **forwards** the enriched payload via HTTP POST to that URL
-5. The next API repeats the same pattern, accumulating data
-6. When `meta.siguiente = null` the final API returns the complete chained payload to the original caller
-
-### GCP Deployment Overview
-
-| Component | GCP Service |
+| | |
 |---|---|
-| Container Registry | Artifact Registry |
-| Kubernetes cluster | GKE — Google Kubernetes Engine (3 replicas) |
-| CI/CD pipeline | Cloud Build (`cloudbuild.yaml`) |
-| Database | Cloud SQL for PostgreSQL |
-| Public access | GKE `LoadBalancer` Service — GKE provisions a public IP automatically |
+| **Base URL** | `http://35.194.53.58` |
+| **Swagger UI** | `http://35.194.53.58/api` |
+| **Cloud** | GCP — GKE `us-central1` |
+| **Replicas** | 3 × NestJS pods |
+| **Database** | Cloud SQL PostgreSQL 13 |
 
----
-
-## Tech Stack
-
-| Layer            | Technology                          |
-|------------------|-------------------------------------|
-| Framework        | NestJS 11 (Node.js / TypeScript)    |
-| ORM              | TypeORM 0.3                         |
-| Database         | PostgreSQL 13                       |
-| Validation       | class-validator + class-transformer |
-| Containerisation | Docker Compose                      |
-| Testing          | Jest + Supertest                    |
-| Linting          | ESLint + typescript-eslint          |
-| Formatting       | Prettier                            |
-
----
-
-## Project Structure
-
-```
-src/
-├── app.module.ts            # Root module — wires all feature modules
-├── main.ts                  # Bootstrap entry point (port 3000)
-│
-├── continent/
-│   ├── continent.entity.ts  # TypeORM entity
-│   ├── continent.service.ts # Business logic / repository access
-│   ├── continent.controller.ts
-│   ├── continent.module.ts
-│   └── dto/
-│       ├── create-continent.dto.ts
-│       └── update-contient.dto.ts
-│
-├── country/
-│   ├── country.entity.ts
-│   ├── country.service.ts
-│   ├── country.controller.ts
-│   ├── country.module.ts
-│   └── dto/
-│       ├── create-continent.dto.ts
-│       └── update-continent.dto.ts
-│
-└── city/
-    ├── city.entity.ts
-    ├── city.service.ts
-    ├── city.controller.ts
-    ├── city.module.ts
-    └── dto/
-        ├── create-city.dto.ts
-        └── update-city.dto.ts
-
-test/
-└── app.e2e-spec.ts          # End-to-end tests
+```bash
+# Quick smoke tests — no setup required
+curl http://35.194.53.58/continents
+curl http://35.194.53.58/countries
+curl http://35.194.53.58/cities
+curl http://35.194.53.58/api/v2/continents
 ```
 
 ---
 
-## Entity Relationship Diagram
+## 🏗 System Architecture
+
+### GCP Deployment Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                     GCP Project: geography-api-493315                    │
+│                                                                          │
+│  GitHub: cubito1080/devops                                               │
+│  push to master ──────────────────────────────────────────────────────► │
+│                                      │ Cloud Build Trigger               │
+│                                      ▼                                   │
+│  ┌────────────────────┐    ┌──────────────────────┐                      │
+│  │  Artifact Registry │◄───│    Cloud Build        │                      │
+│  │  geography-api     │    │    cloudbuild.yaml    │                      │
+│  │  us-central1       │    │                       │                      │
+│  │  [image:$SHA]      │    │  1. docker build      │                      │
+│  └────────┬───────────┘    │  2. docker push       │                      │
+│           │                │  3. sed IMAGE_URI     │                      │
+│           │                │  4. kubectl apply k8s/│                      │
+│           │                └───────────┬───────────┘                      │
+│           │                            │                                  │
+│           │                            ▼                                  │
+│           │     ┌──────────────────────────────────────┐                  │
+│           │     │  GKE Cluster: geography-cluster       │                  │
+│           │     │  Region: us-central1  (3 nodes)       │                  │
+│           │     │                                        │                 │
+│           └────►│  Namespace: geography-api              │                 │
+│                 │  ┌─────────┐ ┌─────────┐ ┌─────────┐  │                 │
+│                 │  │  Pod 1  │ │  Pod 2  │ │  Pod 3  │  │                 │
+│                 │  │ :3000   │ │ :3000   │ │ :3000   │  │                 │
+│                 │  └────┬────┘ └────┬────┘ └────┬────┘  │                 │
+│                 │       └───────────┴────────────┘       │                 │
+│                 │                LoadBalancer             │                 │
+│                 │          35.194.53.58 : 80              │                 │
+│                 └──────────────────┬─────────────────────┘                 │
+│                                    │                                       │
+│                 ┌──────────────────▼─────────────────────┐                 │
+│                 │  Cloud SQL  (geography-db)               │                │
+│                 │  PostgreSQL 13  ·  db-f1-micro           │                │
+│                 │  IP: 34.10.221.217:5432                  │                │
+│                 │  DB: geography_db   User: jero           │                │
+│                 └─────────────────────────────────────────┘                │
+└──────────────────────────────────────────────────────────────────────────┘
+                                  ▲
+                        Internet / Browser / curl
+                        http://35.194.53.58
+```
+
+### CI/CD Pipeline
+
+Every `git push` to `master` triggers the full pipeline automatically — zero manual steps:
+
+```
+git push origin master
+        │
+        ▼
+┌───────────────────────────────────────────────────────────────────────┐
+│  Cloud Build  (~3–5 min total)                                        │
+│                                                                       │
+│  Step 1 ── docker build -t ...artifact-registry.../img:$SHA .        │
+│  Step 2 ── docker push  ...artifact-registry.../img:$SHA             │
+│  Step 3 ── sed s|IMAGE_URI_PLACEHOLDER|...:$SHA| deployment.yaml     │
+│  Step 4 ── gcloud get-credentials → kubectl apply -f k8s/            │
+└──────────────────────────────────────────────┬────────────────────────┘
+                                               │
+                                               ▼
+                       ┌────────────────────────────────────┐
+                       │  GKE rolling update  — 3 replicas  │
+                       │  ✅  Zero-downtime deployment       │
+                       └────────────────────────────────────┘
+```
+
+---
+
+## 🔗 Linked-List API Chain
+
+### Concept
+
+The `POST /api/v2/chain` endpoint implements a **linked-list traversal pattern** across independent microservices. Think of each API as a singly-linked list node:
+
+```
+┌──────────────────────────────────────────┐
+│  API Node                                │
+│                                          │
+│  value  →  enriches payload with data   │
+│  next   →  meta.siguiente  (URL)         │
+└──────────────────────────────────────────┘
+```
+
+Each API node:
+1. Receives the shared JSON payload
+2. Reads `meta.siguiente` (the "next pointer")
+3. Fetches its own domain data and **embeds** it in the payload
+4. Updates `meta`: `antes = origen`, `origen = "api-geografia"`
+5. If `siguiente ≠ null` → **HTTP POST** the enriched payload to that URL and return whatever comes back
+6. If `siguiente = null` → **returns** the final accumulated payload to the original caller
+
+---
+
+### Multi-service Chain Flow
+
+```
+Client                Geography API            Peer API B            Peer API C
+  │                   (this repo)                                  (siguiente=null)
+  │  POST /api/v2/chain    │                        │                    │
+  │ ──────────────────────►│                        │                    │
+  │  {siguiente: API_B}    │                        │                    │
+  │                        │  ① enriches with:     │                    │
+  │                        │     continent          │                    │
+  │                        │     country            │                    │
+  │                        │     city               │                    │
+  │                        │  ② POST to siguiente ─►│                    │
+  │                        │                        │  ① enriches        │
+  │                        │                        │  ② POST ──────────►│
+  │                        │                        │                    │ siguiente=null
+  │                        │                        │                    │ ① enriches
+  │◄───────────────────────┼────────────────────────┼────────────────────│ ② RETURNS
+  │   final accumulated JSON                                              │
+```
+
+---
+
+### How `meta` evolves through the chain
+
+```
+Request from client      After Geography API       After Peer B
+────────────────────     ─────────────────────     ─────────────────────
+meta: {                  meta: {                   meta: {
+  antes:     null          antes:    "client"         antes:    "api-geografia"
+  origen:    "client"      origen:   "api-geografia"  origen:   "api-soporte"
+  siguiente: "API_B"       siguiente: "API_B"          siguiente: "API_C"
+}                        }                          }
+                         continent: { ... }  ◄─── geo data added
+                         country:   { ... }
+                         city:      { ... }
+```
+
+---
+
+### Request Format
+
+```
+POST http://35.194.53.58/api/v2/chain
+Content-Type: application/json
+```
+
+```json
+{
+  "meta": {
+    "antes":     null,
+    "origen":    "my-api",
+    "siguiente": "http://NEXT_PEER_IP/api/v2/chain"
+  },
+  "continent_id": 1,
+  "country_id":   1,
+  "city_id":      1
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `meta.antes` | `string \| null` | No | Previous node name — set automatically |
+| `meta.origen` | `string` | Yes | The caller's name. Overwritten to `"api-geografia"` by this API |
+| `meta.siguiente` | `string \| null` | No | URL to forward to. `null` = this is the last node |
+| `continent_id` | `number` | No | Specific continent. Defaults to first in DB |
+| `country_id` | `number` | No | Specific country. Defaults to first in DB |
+| `city_id` | `number` | No | Specific city. Defaults to first in DB |
+
+---
+
+### Terminal Node Response (`siguiente = null`)
+
+```json
+{
+  "meta": {
+    "antes":     "my-api",
+    "origen":    "api-geografia",
+    "siguiente": null
+  },
+  "continent": {
+    "continent_id": 1,
+    "name":         "Europe",
+    "net_area":     10530000,
+    "geology":      ["Precambrian shields", "Paleozoic fold belts", "Alpine orogeny"],
+    "structure":    ["Baltic Shield", "East European Platform", "Hercynian massifs"],
+    "change_ratio": 0.01,
+    "population":   447000000
+  },
+  "country": {
+    "country_id":       1,
+    "name":             "France",
+    "population":       68000000,
+    "net_area":         551695,
+    "political_system": ["Unitary semi-presidential republic"],
+    "economical_index": { "gdp_trillion_usd": 2.78, "gini": 31.5 },
+    "languages":        ["French"]
+  },
+  "city": {
+    "city_id":          1,
+    "city_name":        "Paris",
+    "population":       2161000,
+    "net_area":         105,
+    "economical_index": { "gdp_billion_usd": 709.0 },
+    "languages":        ["French"]
+  }
+}
+```
+
+---
+
+### Integration Example (for peers)
+
+**Scenario A — Call us as the last node in your chain**
+
+Your API forwards its enriched payload to us; we attach geo data and return the final result.
+
+```bash
+curl -X POST http://35.194.53.58/api/v2/chain \
+  -H "Content-Type: application/json" \
+  -d '{
+    "meta": {
+      "antes":     "your-previous-api",
+      "origen":    "your-api-name",
+      "siguiente": null
+    }
+  }'
+```
+
+**Scenario B — Start the chain here, forward to your API**
+
+We enrich first, then POST to your endpoint.
+
+```bash
+curl -X POST http://35.194.53.58/api/v2/chain \
+  -H "Content-Type: application/json" \
+  -d '{
+    "meta": {
+      "antes":     null,
+      "origen":    "client",
+      "siguiente": "http://YOUR_API_IP/api/v2/chain"
+    }
+  }'
+```
+
+> **Windows PowerShell:** use `curl.exe` and write JSON to a file, then pass it with `-d @payload.json`.
+
+---
+
+## 🗃 Domain Model
+
+### Entity Relationship Diagram
 
 ```mermaid
 erDiagram
     CONTINENT {
-        int continent_id PK
-        string name
-        int net_area
-        jsonb geology
-        jsonb structure
-        float change_ratio
-        int population
+        int     continent_id  PK
+        string  name
+        int     net_area
+        jsonb   geology
+        jsonb   structure
+        float   change_ratio
+        bigint  population
     }
 
     COUNTRY {
-        int country_id PK
-        int continent_id FK
-        string name
-        bigint population
-        int net_area
-        jsonb political_system
-        jsonb economical_index
-        jsonb languages
+        int     country_id    PK
+        int     continent_id  FK
+        string  name
+        bigint  population
+        int     net_area
+        jsonb   political_system
+        jsonb   economical_index
+        jsonb   languages
     }
 
     CITY {
-        int city_id PK
-        int country_id FK
+        int    city_id          PK
+        int    country_id       FK
         string city_name
-        jsonb economical_index
-        jsonb languages
-        int population
-        int net_area
+        jsonb  economical_index
+        jsonb  languages
+        int    population
+        int    net_area
     }
 
-    CONTINENT ||--o{ COUNTRY : "has"
-    COUNTRY ||--o{ CITY : "has"
+    CONTINENT ||--o{ COUNTRY : "has many"
+    COUNTRY   ||--o{ CITY    : "has many"
 ```
 
----
+### Hierarchy
 
-## Domain Model
-
-### Continent
-
-Represents a major landmass. Stores geological and structural metadata.
-
-| Column         | Type      | Description                                                                              |
-|----------------|-----------|------------------------------------------------------------------------------------------|
-| `continent_id` | `integer` | Auto-incremented primary key                                                             |
-| `name`         | `string`  | Continent name (e.g. `"Africa"`)                                                         |
-| `net_area`     | `number`  | Total surface area (km²)                                                                 |
-| `geology`      | `jsonb`   | Array of strings describing chemical composition, rock types, and material age           |
-| `structure`    | `jsonb`   | Array of strings describing tectonic organisation and plate connectivity                 |
-| `change_ratio` | `number`  | Fixed rate at which the continent changes in area, geology, and structure                |
-| `population`   | `number`  | Current population count                                                                 |
-
----
-
-### Country
-
-Represents a sovereign nation. Belongs to a **Continent** via `ManyToOne`.
-
-| Column             | Type      | Description                                                    |
-|--------------------|-----------|----------------------------------------------------------------|
-| `country_id`       | `integer` | Auto-incremented primary key                                   |
-| `continent_id`     | `integer` | Foreign key → `Continent.continent_id`                         |
-| `name`             | `string`  | Country name                                                   |
-| `population`       | `bigint`  | Population count                                               |
-| `net_area`         | `number`  | Total land area (km²)                                          |
-| `political_system` | `jsonb`   | Array of strings describing governance model and institutions  |
-| `economical_index` | `jsonb`   | Key-value map of economic indicators (e.g. `{ "gdp": 21430 }`) |
-| `languages`        | `jsonb`   | Array of official/spoken languages                             |
-
----
-
-### City
-
-Represents a municipality. Belongs to a **Country** via `ManyToOne`.
-
-| Column             | Type      | Description                                                  |
-|--------------------|-----------|--------------------------------------------------------------|
-| `city_id`          | `integer` | Auto-incremented primary key                                 |
-| `country_id`       | `integer` | Foreign key → `Country.country_id`                           |
-| `city_name`        | `string`  | City name                                                    |
-| `economical_index` | `jsonb`   | Key-value map of economic indicators                         |
-| `languages`        | `jsonb`   | Array of languages spoken in the city                        |
-| `population`       | `number`  | City population count                                        |
-| `net_area`         | `number`  | City area (km²)                                              |
-
----
-
-## Data Transfer Objects (DTOs)
-
-All DTOs use `class-validator` decorators. Validation is enforced via NestJS `ValidationPipe`.
-
-### CreateContinentDto
-
-```typescript
-{
-  name: string;          // @IsString
-  net_area: number;      // @IsNumber
-  geology: string[];     // @IsArray + @IsString each
-  structure: string[];   // @IsArray + @IsString each
-  change_ratio: number;  // @IsNumber
-  population: number;    // @IsNumber
-}
+```
+Continent
+│   name · net_area · geology[] · structure[] · change_ratio · population
+│
+└── Country  (continent_id FK)
+│       name · population · net_area · political_system[] · economical_index{} · languages[]
+│
+    └── City  (country_id FK)
+            city_name · population · net_area · economical_index{} · languages[]
 ```
 
-### CreateCityDto
+### Entities
 
-```typescript
-{
-  country_id: number;                   // @IsNumber
-  city_name: string;                    // @IsString
-  economical_index: Record<string, number>; // @IsObject
-  languages: string[];                  // @IsArray + @IsString each
-  population: number;                   // @IsNumber
-  net_area: number;                     // @IsNumber
-}
-```
+#### Continent
 
-> `Update*` DTOs extend the corresponding `Create*` DTO with all fields made optional via `PartialType`.
-
----
-
-## API Endpoints
-
-The server listens on **port 3000** by default.
-
-### Continents Controller
-
-Base path: `/continents`
-
-| Method   | Path               | Description                     |
-|----------|--------------------|---------------------------------|
-| `GET`    | `/continents`      | Return all continents           |
-| `GET`    | `/continents/:id`  | Return a single continent by ID |
-| `POST`   | `/continents`      | Create a new continent          |
-| `PUT`    | `/continents/:id`  | Replace a continent by ID       |
-| `DELETE` | `/continents/:id`  | Delete a continent by ID        |
-
----
-
-### Countries Controller
-
-Base path: `/countries`
-
-| Method   | Path               | Description                    |
-|----------|--------------------|--------------------------------|
-| `GET`    | `/countries`       | Return all countries           |
-| `GET`    | `/countries/:id`   | Return a single country by ID  |
-| `POST`   | `/countries`       | Create a new country           |
-| `PUT`    | `/countries/:id`   | Replace a country by ID        |
-| `DELETE` | `/countries/:id`   | Delete a country by ID         |
-
----
-
-### Cities Controller
-
-Base path: `/cities`
-
-| Method   | Path           | Description                 |
-|----------|----------------|-----------------------------|
-| `GET`    | `/cities`      | Return all cities           |
-| `GET`    | `/cities/:id`  | Return a single city by ID  |
-| `POST`   | `/cities`      | Create a new city           |
-| `PUT`    | `/cities/:id`  | Replace a city by ID        |
-| `DELETE` | `/cities/:id`  | Delete a city by ID         |
-
----
-
-### Continents v2
-
-Base path: `/api/v2/continents`
-
-| Method   | Path                       | Description                         |
-|----------|----------------------------|-------------------------------------|
-| `GET`    | `/api/v2/continents`       | Return all continents               |
-| `GET`    | `/api/v2/continents/:id`   | Return a single continent by ID     |
-| `POST`   | `/api/v2/continents`       | Create a new continent              |
-| `PATCH`  | `/api/v2/continents/:id`   | Partial update of a continent       |
-| `PUT`    | `/api/v2/continents/:id`   | Replace a continent by ID           |
-| `DELETE` | `/api/v2/continents/:id`   | Delete a continent by ID            |
-
----
-
-### Countries v2
-
-Base path: `/api/v2/countries`
-
-| Method   | Path                      | Description                       |
-|----------|---------------------------|-----------------------------------|
-| `GET`    | `/api/v2/countries`       | Return all countries              |
-| `GET`    | `/api/v2/countries/:id`   | Return a single country by ID     |
-| `POST`   | `/api/v2/countries`       | Create a new country              |
-| `PATCH`  | `/api/v2/countries/:id`   | Partial update of a country       |
-| `PUT`    | `/api/v2/countries/:id`   | Replace a country by ID           |
-| `DELETE` | `/api/v2/countries/:id`   | Delete a country by ID            |
-
----
-
-### Cities v2
-
-Base path: `/api/v2/cities`
-
-| Method   | Path                   | Description                   |
-|----------|------------------------|-------------------------------|
-| `GET`    | `/api/v2/cities`       | Return all cities             |
-| `GET`    | `/api/v2/cities/:id`   | Return a single city by ID    |
-| `POST`   | `/api/v2/cities`       | Create a new city             |
-| `PATCH`  | `/api/v2/cities/:id`   | Partial update of a city      |
-| `PUT`    | `/api/v2/cities/:id`   | Replace a city by ID          |
-| `DELETE` | `/api/v2/cities/:id`   | Delete a city by ID           |
-
----
-
-### Chain v2
-
-| Method | Path              | Description                                                   |
-|--------|-------------------|---------------------------------------------------------------|
-| `POST` | `/api/v2/chain`   | Enrich payload with geo data and forward to next API in chain |
-
----
-
-## Chain Payload Format
-
-### Request body
-
-```json
-{
-  "meta": {
-    "antes": null,
-    "origen": "client",
-    "siguiente": "https://support-api.example.com/api/v2/chain"
-  },
-  "continent_id": 1,
-  "country_id": 1,
-  "city_id": 1
-}
-```
-
-| Field | Type | Description |
+| Column | Type | Description |
 |---|---|---|
-| `meta.antes` | `string \| null` | Name/URL of the previous API (set automatically) |
-| `meta.origen` | `string` | Name of the current API origin |
-| `meta.siguiente` | `string \| null` | URL to forward to, or `null` to end the chain |
-| `continent_id` | `number` (optional) | Pick a specific continent; falls back to first in DB |
-| `country_id` | `number` (optional) | Pick a specific country; falls back to first in DB |
-| `city_id` | `number` (optional) | Pick a specific city; falls back to first in DB |
+| `continent_id` | `integer` PK | Auto-increment |
+| `name` | `string` | e.g. `"Europe"` |
+| `net_area` | `number` | Surface area (km²) |
+| `geology` | `jsonb string[]` | Rock types, chemical composition, material age |
+| `structure` | `jsonb string[]` | Tectonic organisation and plate connectivity |
+| `change_ratio` | `float` | Fixed rate of change (area, geology, structure) |
+| `population` | `bigint` | Current population |
 
-### Response (when `siguiente = null`)
+#### Country
 
-The enriched payload is returned directly:
+| Column | Type | Description |
+|---|---|---|
+| `country_id` | `integer` PK | Auto-increment |
+| `continent_id` | `integer` FK | → `continent.continent_id` |
+| `name` | `string` | e.g. `"France"` |
+| `population` | `bigint` | Population count |
+| `net_area` | `number` | Land area (km²) |
+| `political_system` | `jsonb string[]` | Governance model |
+| `economical_index` | `jsonb object` | e.g. `{ "gdp_trillion_usd": 2.78, "gini": 31.5 }` |
+| `languages` | `jsonb string[]` | Official/spoken languages |
+
+#### City
+
+| Column | Type | Description |
+|---|---|---|
+| `city_id` | `integer` PK | Auto-increment |
+| `country_id` | `integer` FK | → `country.country_id` |
+| `city_name` | `string` | e.g. `"Paris"` |
+| `population` | `number` | City population |
+| `net_area` | `number` | City area (km²) |
+| `economical_index` | `jsonb object` | e.g. `{ "gdp_billion_usd": 709 }` |
+| `languages` | `jsonb string[]` | Languages spoken in the city |
+
+---
+
+## 📡 API Endpoints
+
+**Production:** `http://35.194.53.58`
+**Local:** `http://localhost:3000`
+**Swagger UI:** `<base>/api`
+
+---
+
+### v1 — CRUD
+
+#### `/continents`
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/continents` | List all continents |
+| `GET` | `/continents/:id` | Get one continent |
+| `POST` | `/continents` | Create a continent |
+| `PATCH` | `/continents/:id` | Partial update |
+| `PUT` | `/continents/:id` | Full replace |
+| `DELETE` | `/continents/:id` | Delete |
+
+#### `/countries`
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/countries` | List all countries |
+| `GET` | `/countries/:id` | Get one country |
+| `POST` | `/countries` | Create a country |
+| `PATCH` | `/countries/:id` | Partial update |
+| `PUT` | `/countries/:id` | Full replace |
+| `DELETE` | `/countries/:id` | Delete |
+
+#### `/cities`
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/cities` | List all cities |
+| `GET` | `/cities/:id` | Get one city |
+| `POST` | `/cities` | Create a city |
+| `PATCH` | `/cities/:id` | Partial update |
+| `PUT` | `/cities/:id` | Full replace |
+| `DELETE` | `/cities/:id` | Delete |
+
+---
+
+### v2 — CRUD
+
+Same methods as v1, under `/api/v2/`:
+
+| Resource | v2 Base Path |
+|---|---|
+| Continents | `/api/v2/continents` |
+| Countries | `/api/v2/countries` |
+| Cities | `/api/v2/cities` |
+
+---
+
+### v2 — Chain
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/v2/chain` | Enrich payload with geo data and forward to next node |
+
+See [Linked-List API Chain](#-linked-list-api-chain) for full docs.
+
+---
+
+### Create Payload Examples
+
+<details>
+<summary><strong>POST /continents</strong></summary>
 
 ```json
 {
-  "meta": {
-    "antes": "client",
-    "origen": "api-geografia",
-    "siguiente": null
-  },
-  "continent": { ... },
-  "country": { ... },
-  "city": { ... }
+  "name":         "Africa",
+  "net_area":     30370000,
+  "geology":      ["Precambrian cratons", "Rift valleys", "Volcanic belts"],
+  "structure":    ["African Plate", "Nubian Plate", "East African Rift System"],
+  "change_ratio": 0.005,
+  "population":   1400000000
 }
 ```
+</details>
 
-When `meta.siguiente` is set, this API POSTs the enriched payload to that URL and returns whatever the downstream API ultimately responds with.
+<details>
+<summary><strong>POST /countries</strong></summary>
+
+```json
+{
+  "continent_id":     1,
+  "name":             "Portugal",
+  "population":       10000000,
+  "net_area":         92320,
+  "political_system": ["Unitary semi-presidential republic"],
+  "economical_index": { "gdp_billion_usd": 238, "gini": 33.5 },
+  "languages":        ["Portuguese"]
+}
+```
+</details>
+
+<details>
+<summary><strong>POST /cities</strong></summary>
+
+```json
+{
+  "country_id":       1,
+  "city_name":        "Lisbon",
+  "population":       545000,
+  "net_area":         85,
+  "economical_index": { "gdp_billion_usd": 85 },
+  "languages":        ["Portuguese"]
+}
+```
+</details>
 
 ---
 
-## GCP Deployment (GKE)
+## 💻 Tech Stack
 
-The application is deployed to **Google Kubernetes Engine (GKE)** via **Cloud Build**.
-
-> **New to GCP?** Think of it this way:
-> - **Google Cloud Project** = your billing/resource container (like an AWS account)
-> - **Artifact Registry** = where Docker images are stored (like ECR)
-> - **GKE** = managed Kubernetes cluster (like EKS)
-> - **Cloud Build** = runs your pipeline when you push code (like CodePipeline + CodeBuild merged into one)
-> - **Cloud SQL** = managed PostgreSQL database (like RDS)
-
-### Pipeline Flow
-
-```
-GitHub repo push
-  → Cloud Build trigger fires (cloudbuild.yaml)
-      ├── docker build + docker push → Artifact Registry
-      └── kubectl apply k8s/ → GKE cluster
-```
-
-### Step-by-step GCP Setup (one time only)
-
-#### 1. Create a GCP Project
-1. Go to [console.cloud.google.com](https://console.cloud.google.com)
-2. Click the project dropdown (top bar) → **New Project**
-3. Give it a name (e.g. `geography-api`) and note the **Project ID** — you'll use this everywhere
-4. Enable billing on the project
-
-#### 2. Enable required APIs
-In the GCP console, navigate to **APIs & Services → Library** and enable:
-- **Artifact Registry API**
-- **Kubernetes Engine API**
-- **Cloud Build API**
-- **Cloud SQL Admin API** (if using Cloud SQL)
-
-Or enable all at once with the CLI:
-```bash
-gcloud services enable \
-  artifactregistry.googleapis.com \
-  container.googleapis.com \
-  cloudbuild.googleapis.com \
-  sqladmin.googleapis.com
-```
-
-#### 3. Create the Artifact Registry repository
-This is where your Docker images will be stored.
-```bash
-gcloud artifacts repositories create geography-api \
-  --repository-format=docker \
-  --location=us-central1 \
-  --description="Geography API images"
-```
-
-The image URI will be:
-`us-central1-docker.pkg.dev/YOUR_PROJECT_ID/geography-api/geography-api`
-
-#### 4. Create the GKE cluster
-```bash
-gcloud container clusters create geography-cluster \
-  --region=us-central1 \
-  --num-nodes=1 \
-  --machine-type=e2-medium
-```
-
-> `--num-nodes=1` creates 1 node **per zone** in the region (3 zones = 3 nodes total). The Deployment requests 3 replicas which will spread across them.
-
-#### 5. Grant Cloud Build permission to deploy to GKE
-Cloud Build runs as a service account. You need to give it permission to push images and deploy to the cluster.
-
-```bash
-# Find your Cloud Build service account email:
-# It looks like: PROJECT_NUMBER@cloudbuild.gserviceaccount.com
-PROJECT_NUMBER=$(gcloud projects describe YOUR_PROJECT_ID --format='value(projectNumber)')
-
-# Grant Kubernetes Developer role
-gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
-  --member="serviceAccount:$PROJECT_NUMBER@cloudbuild.gserviceaccount.com" \
-  --role="roles/container.developer"
-
-# Grant Artifact Registry Writer role
-gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
-  --member="serviceAccount:$PROJECT_NUMBER@cloudbuild.gserviceaccount.com" \
-  --role="roles/artifactregistry.writer"
-```
-
-#### 6. Create the database secret in the cluster
-Before the first deploy, create the Kubernetes secret that holds the database connection string.
-
-```bash
-# First, point kubectl at your GKE cluster:
-gcloud container clusters get-credentials geography-cluster \
-  --region=us-central1 \
-  --project=YOUR_PROJECT_ID
-
-# Create the namespace first:
-kubectl apply -f k8s/namespace.yaml
-
-# Create the secret:
-kubectl create secret generic geography-api-secret \
-  --namespace=geography-api \
-  --from-literal=DATABASE_URL='postgresql://USER:PASSWORD@HOST:5432/geography_db'
-```
-
-For **Cloud SQL**, the connection string uses the Cloud SQL Auth Proxy socket format:
-```
-postgresql://USER:PASSWORD@/geography_db?host=/cloudsql/PROJECT_ID:us-central1:INSTANCE_NAME
-```
-
-#### 7. Connect Cloud Build to your GitHub repo
-1. In GCP Console → **Cloud Build → Triggers**
-2. Click **Connect Repository** → choose GitHub → authenticate → select this repo
-3. Click **Create Trigger** with these settings:
-   - **Event**: Push to a branch
-   - **Branch**: `^main$` (or `^master$`)
-   - **Build configuration**: `cloudbuild.yaml`
-4. Under **Substitution variables**, add:
-
-| Variable | Value |
+| Layer | Technology |
 |---|---|
-| `_REGION` | `us-central1` |
-| `_REPO_NAME` | `geography-api` |
-| `_GKE_CLUSTER` | `geography-cluster` |
-| `_GKE_REGION` | `us-central1` |
+| Framework | NestJS 11 (Node.js 20 / TypeScript 5) |
+| ORM | TypeORM 0.3 |
+| Database | PostgreSQL 13 |
+| Validation | class-validator + class-transformer |
+| API Docs | Swagger / OpenAPI (`@nestjs/swagger`) |
+| Containerisation | Docker + Docker Compose |
+| Testing | Jest + Supertest |
+| Linting | ESLint + typescript-eslint |
+| Formatting | Prettier |
+| CI/CD | GCP Cloud Build |
+| Hosting | GKE (Google Kubernetes Engine) |
+| Container Registry | GCP Artifact Registry |
+| Database (prod) | GCP Cloud SQL |
 
-From this point on, every push to the branch triggers a full build + deploy automatically.
+---
 
-### Manual Deploy (kubectl only, no Cloud Build)
+## 📁 Project Structure
 
-If you want to deploy manually without the pipeline:
-
-```bash
-# 1. Point kubectl at the cluster (run once per machine)
-gcloud container clusters get-credentials geography-cluster \
-  --region=us-central1 \
-  --project=YOUR_PROJECT_ID
-
-# 2. Build and push the image yourself
-docker build -t us-central1-docker.pkg.dev/YOUR_PROJECT_ID/geography-api/geography-api:latest .
-docker push us-central1-docker.pkg.dev/YOUR_PROJECT_ID/geography-api/geography-api:latest
-
-# 3. Apply manifests (no Ingress needed)
-kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/deployment.yaml -n geography-api
-kubectl apply -f k8s/service.yaml -n geography-api
-
-# 4. Check that everything is running
-kubectl get pods -n geography-api
-kubectl get service geography-api -n geography-api   # shows the public IP
 ```
-
-### Get the public URL after deploy
-
-```bash
-# The EXTERNAL-IP column shows the load balancer IP (may take 1-2 minutes to appear)
-kubectl get service geography-api -n geography-api
-
-# Once you have the IP, hit your API on port 80:
-curl http://EXTERNAL_IP/continents
-curl http://EXTERNAL_IP/api/v2/continents
+devops/
+├── src/
+│   ├── main.ts                        ← Bootstrap (port 3000, Swagger setup)
+│   ├── app.module.ts                  ← Root module
+│   ├── seed.ts                        ← DB seeder (run once)
+│   │
+│   ├── continent/
+│   │   ├── continent.entity.ts
+│   │   ├── continent.service.ts
+│   │   ├── continent.controller.ts    ← v1  /continents
+│   │   ├── continent.v2.controller.ts ← v2  /api/v2/continents
+│   │   ├── continent.module.ts
+│   │   └── dto/
+│   │       ├── create-continent.dto.ts
+│   │       └── update-continent.dto.ts
+│   │
+│   ├── country/               (same structure as continent/)
+│   ├── city/                  (same structure as continent/)
+│   │
+│   └── chain/
+│       ├── chain.controller.ts  ← POST /api/v2/chain
+│       ├── chain.service.ts     ← enrichment + HTTP forward logic
+│       └── chain.module.ts
+│
+├── k8s/
+│   ├── namespace.yaml           ← geography-api namespace
+│   ├── deployment.yaml          ← 3 replicas, reads DATABASE_URL from secret
+│   ├── service.yaml             ← LoadBalancer port 80 → 3000
+│   └── secret.example.yaml     ← reference for creating the K8s secret
+│
+├── cloudbuild.yaml              ← CI/CD pipeline (4 steps)
+├── Dockerfile                   ← Multi-stage Node 20 build
+├── docker-compose.yml           ← Local stack (app + postgres)
+└── .env.example                 ← All env vars + full GCP infrastructure reference
 ```
 
 ---
 
-## Database
-
-The project uses **PostgreSQL 13** managed through Docker Compose.
-
-```yaml
-# docker-compose.yml
-services:
-  postgres:
-    image: postgres:13
-    environment:
-      POSTGRES_USER: jero
-      POSTGRES_PASSWORD: 123
-      POSTGRES_DB: geography_db
-    ports:
-      - '5433:5432'        # host:container — connect via port 5433 locally
-    volumes:
-      - geography_data:/var/lib/postgresql/data
-```
-
-TypeORM is configured to synchronise the schema automatically in development (`synchronize: true`). **Never use `synchronize: true` in production** — use migrations instead.
-
----
-
-## Getting Started
+## 🚀 Local Development
 
 ### Prerequisites
 
-| Tool | Minimum version | Notes |
+| Tool | Version | Notes |
 |---|---|---|
-| Node.js | 20 | `node -v` to verify |
-| npm | 10 | bundled with Node 20 |
+| Node.js | ≥ 20 | `node -v` |
+| npm | ≥ 10 | bundled with Node 20 |
 | Docker Desktop | any recent | Docker Compose v2 required |
-| WSL2 | — | Windows only, needed for the seed script |
 
 ---
 
-### Option A — Full Docker Stack (recommended for peers)
+### Option A — Docker (recommended for peers)
 
-Run the database **and** the application inside Docker. No local Node.js install required beyond seeding.
-
-**1. Clone and enter the repo**
+No Node.js setup required beyond the seed step.
 
 ```bash
-git clone <repo-url>
+# 1. Clone
+git clone https://github.com/cubito1080/devops.git
 cd devops
-```
 
-**2. Start all containers**
-
-```bash
+# 2. Start API + DB in Docker
 docker compose up -d
-```
 
-This builds the app image and starts two containers:
-
-| Container | Service | Port |
-|---|---|---|
-| `devops-app-1` | NestJS API | `localhost:3000` |
-| `devops-postgres-1` | PostgreSQL 13 | `localhost:5433` |
-
-Wait ~15 seconds for the healthcheck to pass. Verify with:
-
-```bash
+# Wait ~15 seconds, then verify both containers are healthy
 docker compose ps
-# Both containers should show "Up ... (healthy)"
-```
 
-**3. Seed the database**
-
-```bash
-# Linux / macOS
+# 3. Seed the database (first time only)
+#    Linux / macOS:
 DATABASE_URL=postgresql://jero:123@localhost:5433/geography_db npm run seed
 
-# Windows (WSL)
-wsl -e bash -c "cd /mnt/c/path/to/devops && DATABASE_URL=postgresql://jero:123@localhost:5433/geography_db npm run seed"
-```
+#    Windows PowerShell:
+$env:DATABASE_URL="postgresql://jero:123@localhost:5433/geography_db"; npm run seed
 
-**4. Verify the API is responding**
-
-```bash
+# 4. Test
 curl http://localhost:3000/continents
-# → JSON array of continents
-
 curl http://localhost:3000/api/v2/continents
-# → same, through the v2 route
-```
 
-**5. Tear down**
-
-```bash
-docker compose down          # stops containers, keeps postgres volume
-docker compose down -v       # stops containers and deletes all data
+# 5. Tear down
+docker compose down      # stop (keeps data)
+docker compose down -v   # stop + delete all data
 ```
 
 ---
 
-### Option B — Local Development (app outside Docker)
-
-The database runs in Docker, the NestJS app runs locally with hot-reload.
-
-**1. Install dependencies**
+### Option B — Local App + Docker DB
 
 ```bash
+# 1. Install dependencies
 npm install
-```
 
-**2. Start only the database**
-
-```bash
+# 2. Start only Postgres
 docker compose up -d postgres
-```
 
-**3. Create a `.env` file** at the project root:
+# 3. Create .env (uncomment the LOCAL line)
+cp .env.example .env
+# DATABASE_URL=postgresql://jero:123@localhost:5433/geography_db
 
-```env
-DATABASE_URL=postgresql://jero:123@localhost:5433/geography_db
-NODE_ENV=development
-PORT=3000
-```
+# 4. Seed (first time only)
+npm run seed
 
-> The app reads a single `DATABASE_URL` connection string — individual `DB_*` variables are **not** used.
-
-**4. Seed the database** (first time only)
-
-```bash
-DATABASE_URL=postgresql://jero:123@localhost:5433/geography_db npm run seed
-```
-
-**5. Run the application**
-
-```bash
-# Watch mode — auto-restarts on file changes (recommended)
+# 5. Start with hot-reload
 npm run start:dev
-
-# Standard start (compiled output)
-npm run build
-npm run start:prod
+# API:    http://localhost:3000
+# Swagger: http://localhost:3000/api
 ```
-
-The API will be available at `http://localhost:3000`.
 
 ---
 
-### Connecting to PostgreSQL directly
+### Local DB Credentials
 
-If you need to inspect the database with a client (e.g. DBeaver, psql, TablePlus):
-
-| Field | Value |
+| | |
 |---|---|
 | Host | `localhost` |
 | Port | `5433` |
 | Database | `geography_db` |
-| Username | `jero` |
+| User | `jero` |
 | Password | `123` |
 
 ```bash
-# psql (if installed locally)
+# psql locally
 psql -h localhost -p 5433 -U jero -d geography_db
 
 # psql via Docker
@@ -765,69 +669,104 @@ docker exec -it devops-postgres-1 psql -U jero -d geography_db
 
 ---
 
-### Quick smoke test
-
-After seeding, run these to confirm all layers are working:
+### Chain Smoke Tests
 
 ```bash
-# v1 routes
-curl http://localhost:3000/continents
-curl http://localhost:3000/countries
-curl http://localhost:3000/cities
-
-# v2 CRUD routes
-curl http://localhost:3000/api/v2/continents
-curl http://localhost:3000/api/v2/countries
-curl http://localhost:3000/api/v2/cities
-
-# Chain — terminal node (no forwarding)
+# Terminal node — returns enriched payload directly
 curl -X POST http://localhost:3000/api/v2/chain \
   -H "Content-Type: application/json" \
   -d '{"meta":{"antes":null,"origen":"test","siguiente":null}}'
 
-# Chain — specific entities by ID
+# With specific IDs
 curl -X POST http://localhost:3000/api/v2/chain \
   -H "Content-Type: application/json" \
-  -d '{"meta":{"antes":null,"origen":"test","siguiente":null},"continent_id":1,"country_id":1,"city_id":1}'
+  -d '{"meta":{"antes":null,"origen":"test","siguiente":null},"continent_id":2,"country_id":5,"city_id":5}'
 
-# Chain — forwarding to another API (replace URL with the next service)
+# Forwarding to another API
 curl -X POST http://localhost:3000/api/v2/chain \
   -H "Content-Type: application/json" \
-  -d '{"meta":{"antes":null,"origen":"test","siguiente":"https://next-api.example.com/api/v2/chain"}}'
+  -d '{"meta":{"antes":null,"origen":"test","siguiente":"http://PEER_IP/api/v2/chain"}}'
 ```
-
-> **Windows PowerShell note:** use `curl.exe` instead of `curl`, and use a JSON file (`-d @payload.json`) to avoid quoting issues.
 
 ---
 
-## Linting & Formatting
+## ☁️ GCP Reference
+
+### Live Infrastructure
+
+| Resource | Value |
+|---|---|
+| **Project ID** | `geography-api-493315` |
+| **Project Number** | `492692263761` |
+| **Region** | `us-central1` |
+| **GKE Cluster** | `geography-cluster` — 3 nodes, e2-medium |
+| **Service IP** | `35.194.53.58:80` |
+| **K8s Namespace** | `geography-api` |
+| **K8s Secret** | `geography-api-secret` (key: `DATABASE_URL`) |
+| **Artifact Registry** | `us-central1-docker.pkg.dev/geography-api-493315/geography-api` |
+| **Cloud SQL Instance** | `geography-db` — PostgreSQL 13, db-f1-micro |
+| **Cloud SQL IP** | `34.10.221.217:5432` |
+| **Cloud Build SA** | `492692263761@cloudbuild.gserviceaccount.com` |
+| **GitHub Trigger** | push to `^master$` → `cloudbuild.yaml` |
+
+---
+
+### Trigger a Redeploy
 
 ```bash
-# Lint and auto-fix all TypeScript source files
-npm run lint
-
-# Format all source files with Prettier
-npm run format
+git commit --allow-empty -m ':rocket: chore: redeploy'
+git push origin master
 ```
-
-ESLint is configured with `typescript-eslint` type-aware rules (`recommendedTypeChecked`). Key rules active:
-
-- `@typescript-eslint/no-floating-promises` — warns on unhandled promises
-- `@typescript-eslint/no-unsafe-argument` — warns on untyped arguments
-- `@typescript-eslint/no-explicit-any` — off (permissive)
 
 ---
 
-## Scripts Reference
+### Recreate from Scratch (disaster recovery)
 
-| Script            | Description                                     |
-|-------------------|-------------------------------------------------|
-| `npm run build`   | Compile TypeScript to `dist/`                   |
-| `npm run start`   | Start compiled app                              |
-| `npm run start:dev` | Start in watch mode                           |
-| `npm run start:prod` | Start production build                       |
-| `npm run lint`    | ESLint with auto-fix                            |
-| `npm run format`  | Prettier format                                 |
-| `npm run test`    | Run unit tests                                  |
-| `npm run test:e2e` | Run end-to-end tests                           |
-| `npm run test:cov` | Generate coverage report                       |
+```bash
+# 1. Authenticate
+gcloud auth login
+gcloud config set project geography-api-493315
+
+# 2. Connect kubectl
+gcloud container clusters get-credentials geography-cluster \
+  --region=us-central1 --project=geography-api-493315
+
+# 3. Recreate namespace + secret
+kubectl create namespace geography-api
+kubectl create secret generic geography-api-secret \
+  --namespace=geography-api \
+  --from-literal=DATABASE_URL='postgresql://jero:Geo1234!@34.10.221.217:5432/geography_db'
+
+# 4. Trigger deploy
+git commit --allow-empty -m ':rocket: chore: redeploy'
+git push origin master
+```
+
+---
+
+### Seed Cloud SQL
+
+```bash
+cp .env .env.backup
+printf 'DATABASE_URL=postgresql://jero:Geo1234!@34.10.221.217:5432/geography_db\nNODE_ENV=production\nPORT=3000\n' > .env
+npm run seed
+cp .env.backup .env
+```
+
+---
+
+## 📜 Scripts
+
+| Script | Description |
+|---|---|
+| `npm run build` | Compile TypeScript → `dist/` |
+| `npm run start` | Start compiled app |
+| `npm run start:dev` | Watch mode with hot-reload |
+| `npm run start:prod` | Start production build from `dist/` |
+| `npm run seed` | Seed the database with sample geographic data |
+| `npm run lint` | ESLint with auto-fix |
+| `npm run format` | Prettier format all source files |
+| `npm run test` | Run unit tests (Jest) |
+| `npm run test:e2e` | Run end-to-end tests |
+| `npm run test:cov` | Generate coverage report |
+

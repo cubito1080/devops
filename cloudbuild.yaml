@@ -92,6 +92,11 @@ steps:
           --namespace=geography-api \
           --timeout=120s
 
+# Send build logs to Cloud Logging instead of a GCS bucket.
+# Required when the project enforces a service account on builds.
+options:
+  logging: CLOUD_LOGGING_ONLY
+
 # Tell Cloud Build which images were produced by this pipeline.
 # These appear in the build history and are kept in Artifact Registry.
 images:

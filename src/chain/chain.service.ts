@@ -1,11 +1,16 @@
 import { BadGatewayException, Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { ContinentService } from '../continent/continent.service';
 import { CountryService } from '../country/country.service';
 import { CityService } from '../city/city.service';
+import { ChainResult } from './chain-result.entity';
 
 @Injectable()
 export class ChainService {
   constructor(
+    @InjectRepository(ChainResult)
+    private readonly chainResultRepository: Repository<ChainResult>,
     private readonly continentService: ContinentService,
     private readonly countryService: CountryService,
     private readonly cityService: CityService,
@@ -48,6 +53,10 @@ export class ChainService {
     const siguiente: string | null = meta.siguiente ?? null;
 
     if (!siguiente) {
+      await this.chainResultRepository.save({
+        origen: meta.origen ?? null,
+        result: enriched,
+      });
       return enriched;
     }
 
@@ -72,5 +81,15 @@ export class ChainService {
         `Failed to reach next API at ${siguiente}: ${(err as Error).message}`,
       );
     }
+  }
+
+  findAll(): Promise<ChainResult[]> {
+    return this.chainResultRepository.find({
+      order: { received_at: 'DESC' },
+    });
+  }
+
+  findOne(id: number): Promise<ChainResult | null> {
+    return this.chainResultRepository.findOne({ where: { id } });
   }
 }

@@ -40,9 +40,14 @@ export class ChainService {
 
     const enriched: Record<string, any> = {
       ...payload,
-      continent,
-      country,
-      city,
+      payload: {
+        ...(payload.payload ?? {}),
+        geografia: {
+          continent,
+          country,
+          city,
+        },
+      },
       meta: {
         antes: meta.origen ?? null,
         origen: 'api-geografia',

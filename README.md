@@ -50,10 +50,10 @@ A RESTful API built with **NestJS**, **TypeORM**, and **PostgreSQL** that models
 
 ```bash
 # Quick smoke tests — no setup required
-curl http://35.194.53.58/continents
-curl http://35.194.53.58/countries
-curl http://35.194.53.58/cities
 curl http://35.194.53.58/api/v2/continents
+curl http://35.194.53.58/api/v2/countries
+curl http://35.194.53.58/api/v2/cities
+curl http://35.194.53.58/api/v2/chain          # GET saved terminal results
 ```
 
 ---
@@ -151,10 +151,10 @@ The `POST /api/v2/chain` endpoint implements a **linked-list traversal pattern**
 Each API node:
 1. Receives the shared JSON payload
 2. Reads `meta.siguiente` (the "next pointer")
-3. Fetches its own domain data and **embeds** it in the payload
+3. Fetches its own domain data and **embeds** it under `payload.<domain>` (e.g. `payload.geografia`)
 4. Updates `meta`: `antes = origen`, `origen = "api-geografia"`
 5. If `siguiente ≠ null` → **HTTP POST** the enriched payload to that URL and return whatever comes back
-6. If `siguiente = null` → **returns** the final accumulated payload to the original caller
+6. If `siguiente = null` → **saves to DB** and returns the final accumulated payload to the original caller
 
 ---
 
@@ -167,6 +167,7 @@ Client                Geography API            Peer API B            Peer API C
   │ ──────────────────────►│                        │                    │
   │  {siguiente: API_B}    │                        │                    │
   │                        │  ① enriches with:     │                    │
+  │                        │   payload.geografia    │                    │
   │                        │     continent          │                    │
   │                        │     country            │                    │
   │                        │     city               │                    │
@@ -184,16 +185,21 @@ Client                Geography API            Peer API B            Peer API C
 ### How `meta` evolves through the chain
 
 ```
-Request from client      After Geography API       After Peer B
-────────────────────     ─────────────────────     ─────────────────────
+Request from client      After Geography API       After Peer B (soporte)
+────────────────────     ─────────────────────     ──────────────────────
 meta: {                  meta: {                   meta: {
   antes:     null          antes:    "client"         antes:    "api-geografia"
   origen:    "client"      origen:   "api-geografia"  origen:   "api-soporte"
   siguiente: "API_B"       siguiente: "API_B"          siguiente: "API_C"
 }                        }                          }
-                         continent: { ... }  ◄─── geo data added
-                         country:   { ... }
-                         city:      { ... }
+                         payload: {                 payload: {
+                           geografia: {               geografia: { ... } ✓
+                             continent: { ... }        soporte: {
+                             country:   { ... }          solicitante: {}
+                             city:      { ... }          ticket:      {}
+                           }                             comentario:  {}
+                         }                           ◄── }
+                                                    }
 ```
 
 ---
@@ -238,31 +244,35 @@ Content-Type: application/json
     "origen":    "api-geografia",
     "siguiente": null
   },
-  "continent": {
-    "continent_id": 1,
-    "name":         "Europe",
-    "net_area":     10530000,
-    "geology":      ["Precambrian shields", "Paleozoic fold belts", "Alpine orogeny"],
-    "structure":    ["Baltic Shield", "East European Platform", "Hercynian massifs"],
-    "change_ratio": 0.01,
-    "population":   447000000
-  },
-  "country": {
-    "country_id":       1,
-    "name":             "France",
-    "population":       68000000,
-    "net_area":         551695,
-    "political_system": ["Unitary semi-presidential republic"],
-    "economical_index": { "gdp_trillion_usd": 2.78, "gini": 31.5 },
-    "languages":        ["French"]
-  },
-  "city": {
-    "city_id":          1,
-    "city_name":        "Paris",
-    "population":       2161000,
-    "net_area":         105,
-    "economical_index": { "gdp_billion_usd": 709.0 },
-    "languages":        ["French"]
+  "payload": {
+    "geografia": {
+      "continent": {
+        "continent_id": 1,
+        "name":         "Europe",
+        "net_area":     10530000,
+        "geology":      ["Precambrian shields", "Paleozoic fold belts", "Alpine orogeny"],
+        "structure":    ["Baltic Shield", "East European Platform", "Hercynian massifs"],
+        "change_ratio": 0.01,
+        "population":   447000000
+      },
+      "country": {
+        "country_id":       1,
+        "name":             "France",
+        "population":       68000000,
+        "net_area":         551695,
+        "political_system": ["Unitary semi-presidential republic"],
+        "economical_index": { "gdp_trillion_usd": 2.78, "gini": 31.5 },
+        "languages":        ["French"]
+      },
+      "city": {
+        "city_id":          1,
+        "city_name":        "Paris",
+        "population":       2161000,
+        "net_area":         105,
+        "economical_index": { "gdp_billion_usd": 709.0 },
+        "languages":        ["French"]
+      }
+    }
   }
 }
 ```
@@ -271,9 +281,11 @@ Content-Type: application/json
 
 ### Integration Example (for peers)
 
+**Group chain order: Geography (GCP) → Soporte (AWS) → Fútbol**
+
 **Scenario A — Call us as the last node in your chain**
 
-Your API forwards its enriched payload to us; we attach geo data and return the final result.
+Your API forwards its enriched payload to us; we attach geo data under `payload.geografia` and return.
 
 ```bash
 curl -X POST http://35.194.53.58/api/v2/chain \
@@ -283,13 +295,14 @@ curl -X POST http://35.194.53.58/api/v2/chain \
       "antes":     "your-previous-api",
       "origen":    "your-api-name",
       "siguiente": null
-    }
+    },
+    "payload": {}
   }'
 ```
 
-**Scenario B — Start the chain here, forward to your API**
+**Scenario B — Start the full group chain here**
 
-We enrich first, then POST to your endpoint.
+We enrich first (geo data), then POST to Soporte, which adds support data, then forwards to Fútbol.
 
 ```bash
 curl -X POST http://35.194.53.58/api/v2/chain \
@@ -298,8 +311,12 @@ curl -X POST http://35.194.53.58/api/v2/chain \
     "meta": {
       "antes":     null,
       "origen":    "client",
-      "siguiente": "http://YOUR_API_IP/api/v2/chain"
-    }
+      "siguiente": "http://13.59.49.180:8000/api/v2/integracion/"
+    },
+    "continent_id": 1,
+    "country_id":   1,
+    "city_id":      1,
+    "payload": {}
   }'
 ```
 
@@ -463,7 +480,9 @@ Same methods as v1, under `/api/v2/`:
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/v2/chain` | Enrich payload with geo data and forward to next node |
+| `POST` | `/api/v2/chain` | Enrich payload with geo data under `payload.geografia` and forward to next node |
+| `GET` | `/api/v2/chain` | List all saved terminal chain results (newest first) |
+| `GET` | `/api/v2/chain/:id` | Get one saved chain result by id |
 
 See [Linked-List API Chain](#-linked-list-api-chain) for full docs.
 
@@ -672,20 +691,26 @@ docker exec -it devops-postgres-1 psql -U jero -d geography_db
 ### Chain Smoke Tests
 
 ```bash
-# Terminal node — returns enriched payload directly
+# Terminal node — saves to DB and returns enriched payload
 curl -X POST http://localhost:3000/api/v2/chain \
   -H "Content-Type: application/json" \
-  -d '{"meta":{"antes":null,"origen":"test","siguiente":null}}'
+  -d '{"meta":{"antes":null,"origen":"test","siguiente":null},"payload":{}}'
 
 # With specific IDs
 curl -X POST http://localhost:3000/api/v2/chain \
   -H "Content-Type: application/json" \
-  -d '{"meta":{"antes":null,"origen":"test","siguiente":null},"continent_id":2,"country_id":5,"city_id":5}'
+  -d '{"meta":{"antes":null,"origen":"test","siguiente":null},"continent_id":2,"country_id":5,"city_id":5,"payload":{}}'
 
-# Forwarding to another API
+# Forward to Soporte API (group chain)
 curl -X POST http://localhost:3000/api/v2/chain \
   -H "Content-Type: application/json" \
-  -d '{"meta":{"antes":null,"origen":"test","siguiente":"http://PEER_IP/api/v2/chain"}}'
+  -d '{"meta":{"antes":null,"origen":"client","siguiente":"http://13.59.49.180:8000/api/v2/integracion/"},"continent_id":1,"country_id":1,"city_id":1,"payload":{}}'
+
+# View saved terminal results
+curl http://localhost:3000/api/v2/chain
+
+# View one result by id
+curl http://localhost:3000/api/v2/chain/1
 ```
 
 ---

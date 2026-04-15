@@ -67,9 +67,16 @@ export class ChainService {
 
     // Forward enriched payload to the next API in the chain
     try {
+      const forwardHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (siguiente.includes('helpdesk-api-702693621768')) {
+        forwardHeaders['X-Integration-Token'] =
+          'Nr3BavebHt78rRuYqmxEeH5HGulTGNM-8vjfI5Vd6rRkIP6XPWPKb6WWQbBSinuj';
+      }
       const response = await fetch(siguiente, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: forwardHeaders,
         body: JSON.stringify(enriched),
       });
 

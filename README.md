@@ -18,6 +18,7 @@ A RESTful API built with **NestJS**, **TypeORM**, and **PostgreSQL** that models
 
 - [Live Instance](#-live-instance)
 - [System Architecture](#-system-architecture)
+  - [Multicloud Group Architecture](#multicloud-group-architecture)
   - [GCP Deployment Architecture](#gcp-deployment-architecture)
   - [CI/CD Pipeline](#cicd-pipeline)
 - [Linked-List API Chain](#-linked-list-api-chain)
@@ -59,6 +60,63 @@ curl http://35.194.53.58/api/v2/chain          # GET saved terminal results
 ---
 
 ## 🏗 System Architecture
+
+### Multicloud Group Architecture
+
+```
+┌──────────────────────────── GCP ─────────────────────────────────────────┐    ┌─── AWS ────┐
+│                                                                           │    │            │
+│  ┌─────────────────────────────────────┐   ┌───────────────────────────┐ │    │ ┌────────┐ │
+│  │   GKE Cluster: geography-cluster    │   │  Cloud Run                │ │    │ │  EC2   │ │
+│  │   Region: us-central1               │   │  Region: us-central1      │ │    │ │        │ │
+│  │                                     │   │                           │ │    │ │Fútbol  │ │
+│  │  ┌────────┐ ┌────────┐ ┌────────┐  │   │  ┌─────────────────────┐  │ │    │ │  API   │ │
+│  │  │ Pod 1  │ │ Pod 2  │ │ Pod 3  │  │   │  │   Helpdesk API      │  │ │    │ │        │ │
+│  │  │ :3000  │ │ :3000  │ │ :3000  │  │   │  │   Django REST       │  │ │    │ │FastAPI │ │
+│  │  └───┬────┘ └───┬────┘ └───┬────┘  │   │  │   /api/v2/chain/    │  │ │    │ │ :8000  │ │
+│  │      └──────────┴──────────┘       │   │  └──────────┬──────────┘  │ │    │ └───┬────┘ │
+│  │              LoadBalancer           │   │             │             │ │    │     │      │
+│  │           35.194.53.58:80           │   │  ┌──────────▼──────────┐  │ │    │ ┌───▼────┐ │
+│  │                                     │   │  │  Cloud SQL (Django)  │  │ │    │ │  DB    │ │
+│  │  ┌──────────────────────────────┐   │   │  └─────────────────────┘  │ │    │ └────────┘ │
+│  │  │  Cloud SQL: geography-db     │   │   │                           │ │    │            │
+│  │  │  PostgreSQL 13               │   │   │  helpdesk-api-            │ │    │13.59.49.180│
+│  │  │  34.10.221.217:5432          │   │   │  702693621768.            │ │    │            │
+│  │  └──────────────────────────────┘   │   │  us-central1.run.app      │ │    └────────────┘
+│  │                                     │   └───────────────────────────┘ │
+│  │  ┌──────────────────────────────┐   │                                  │
+│  │  │  Artifact Registry           │   │                                  │
+│  │  │  geography-api images        │   │                                  │
+│  │  └──────────────────────────────┘   │                                  │
+│  │                                     │                                  │
+│  │  ┌──────────────────────────────┐   │                                  │
+│  │  │  Cloud Build (CI/CD)         │   │                                  │
+│  │  │  push to master → auto deploy│   │                                  │
+│  │  └──────────────────────────────┘   │                                  │
+│  └─────────────────────────────────────┘                                  │
+└───────────────────────────────────────────────────────────────────────────┘
+
+─────────────────────────────── CHAIN FLOW ──────────────────────────────────
+
+  Client (Postman / curl)
+        │
+        │  POST /api/v2/chain  { siguiente: helpdesk_url }
+        ▼
+  ┌─────────────┐  POST + geo data   ┌─────────────┐  POST + soporte data  ┌─────────────┐
+  │  Geography  │──────────────────► │  Helpdesk   │─────────────────────► │   Fútbol    │
+  │  GCP / GKE  │                    │ GCP / Cloud │                       │  AWS / EC2  │
+  │             │                    │     Run     │                       │             │
+  │ + geografia │                    │  + soporte  │                       │  + futbol   │
+  └─────────────┘                    └─────────────┘                       └──────┬──────┘
+        ▲                                                                          │
+        │               final payload bubbles back                                 │
+        └──────────────────────────────────────────────────────────────────────────┘
+
+  payload grows at each hop:
+  After Geography → { geografia: { continent, country, city } }
+  After Helpdesk  → { geografia: {...}, soporte: { solicitante, ticket, comentario } }
+  After Fútbol    → { geografia: {...}, soporte: {...}, futbol: { equipo, jugador, partido } }
+```
 
 ### GCP Deployment Architecture
 

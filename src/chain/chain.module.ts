@@ -6,9 +6,15 @@ import { CityModule } from '../city/city.module';
 import { ChainService } from './chain.service';
 import { ChainController } from './chain.controller';
 import { ChainResult } from './chain-result.entity';
+import { ChainEvent } from './chain-event.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ChainResult]), ContinentModule, CountryModule, CityModule],
+  imports: [
+    TypeOrmModule.forFeature([ChainResult, ChainEvent]),
+    ContinentModule,
+    CountryModule,
+    CityModule,
+  ],
   providers: [ChainService],
   controllers: [ChainController],
 })

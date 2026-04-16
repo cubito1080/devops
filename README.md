@@ -186,6 +186,42 @@ flowchart TD
     FutbolAPI -.->|final accumulated response| Client
 ```
 
+#### Chain Flow Diagram
+
+```mermaid
+flowchart LR
+    Client([Client\nPostman / curl / browser])
+
+    subgraph GCP [GCP — us-central1]
+        direction TB
+
+        subgraph GKE [GKE — geography-cluster]
+            LB[Load Balancer\n35.194.53.58 : 80]
+            GeoPods[Pod 1 / Pod 2 / Pod 3\nNestJS 11 TypeScript\nPOST /api/v2/chain]
+            LB --> GeoPods
+        end
+        GeoSQL[(Cloud SQL PostgreSQL 13\ncontinents · countries\ncities · chain_result)]
+        GeoPods --- GeoSQL
+
+        subgraph CloudRun [Cloud Run]
+            HelpAPI[Helpdesk API\nDjango + DRF Python\nPOST /api/v2/chain/\nAuth: X-Integration-Token]
+        end
+        HelpSQL[(Cloud SQL PostgreSQL\nsolicitantes · tickets\ncomentarios · eventos)]
+        HelpAPI --- HelpSQL
+    end
+
+    subgraph AWS [AWS — EC2]
+        FutAPI[Futbol API\nFastAPI Python\nPOST /api/v2/integracion/\nport 8000]
+        FutDB[(PostgreSQL\nequipos · jugadores\npartidos · integraciones)]
+        FutAPI --- FutDB
+    end
+
+    Client -->|"1  POST /api/v2/chain\nmeta.siguiente = helpdesk_url"| LB
+    GeoPods -->|"2  adds payload.geografia\nforwards enriched payload"| HelpAPI
+    HelpAPI -->|"3  adds payload.soporte\nforwards enriched payload"| FutAPI
+    FutAPI -.->|"4  adds payload.futbol\nfinal response bubbles back"| Client
+```
+
 ---
 
 ### GCP Deployment Architecture

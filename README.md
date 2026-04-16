@@ -64,58 +64,74 @@ curl http://35.194.53.58/api/v2/chain          # GET saved terminal results
 ### Multicloud Group Architecture
 
 ```
-┌──────────────────────────── GCP ─────────────────────────────────────────┐    ┌─── AWS ────┐
-│                                                                           │    │            │
-│  ┌─────────────────────────────────────┐   ┌───────────────────────────┐ │    │ ┌────────┐ │
-│  │   GKE Cluster: geography-cluster    │   │  Cloud Run                │ │    │ │  EC2   │ │
-│  │   Region: us-central1               │   │  Region: us-central1      │ │    │ │        │ │
-│  │                                     │   │                           │ │    │ │Fútbol  │ │
-│  │  ┌────────┐ ┌────────┐ ┌────────┐  │   │  ┌─────────────────────┐  │ │    │ │  API   │ │
-│  │  │ Pod 1  │ │ Pod 2  │ │ Pod 3  │  │   │  │   Helpdesk API      │  │ │    │ │        │ │
-│  │  │ :3000  │ │ :3000  │ │ :3000  │  │   │  │   Django REST       │  │ │    │ │FastAPI │ │
-│  │  └───┬────┘ └───┬────┘ └───┬────┘  │   │  │   /api/v2/chain/    │  │ │    │ │ :8000  │ │
-│  │      └──────────┴──────────┘       │   │  └──────────┬──────────┘  │ │    │ └───┬────┘ │
-│  │              LoadBalancer           │   │             │             │ │    │     │      │
-│  │           35.194.53.58:80           │   │  ┌──────────▼──────────┐  │ │    │ ┌───▼────┐ │
-│  │                                     │   │  │  Cloud SQL (Django)  │  │ │    │ │  DB    │ │
-│  │  ┌──────────────────────────────┐   │   │  └─────────────────────┘  │ │    │ └────────┘ │
-│  │  │  Cloud SQL: geography-db     │   │   │                           │ │    │            │
-│  │  │  PostgreSQL 13               │   │   │  helpdesk-api-            │ │    │13.59.49.180│
-│  │  │  34.10.221.217:5432          │   │   │  702693621768.            │ │    │            │
-│  │  └──────────────────────────────┘   │   │  us-central1.run.app      │ │    └────────────┘
-│  │                                     │   └───────────────────────────┘ │
-│  │  ┌──────────────────────────────┐   │                                  │
-│  │  │  Artifact Registry           │   │                                  │
-│  │  │  geography-api images        │   │                                  │
-│  │  └──────────────────────────────┘   │                                  │
-│  │                                     │                                  │
-│  │  ┌──────────────────────────────┐   │                                  │
-│  │  │  Cloud Build (CI/CD)         │   │                                  │
-│  │  │  push to master → auto deploy│   │                                  │
-│  │  └──────────────────────────────┘   │                                  │
-│  └─────────────────────────────────────┘                                  │
-└───────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────── GCP ──────────────────────────────────────────────────────────────┐   ┌───────────────────────── AWS ─────────────────────────┐
+│                                                                                                                │   │                                                       │
+│  ┌──────────────────────────────────────────────────┐   ┌──────────────────────────────────────────────────┐ │   │  ┌─────────────────────────────────────────────────┐  │
+│  │          GEOGRAPHY API  (this repo)               │   │          HELPDESK API  (peer)                    │ │   │  │           FÚTBOL API  (peer)                    │  │
+│  │                                                   │   │                                                  │ │   │  │                                                 │  │
+│  │  Framework : NestJS 11 + TypeORM                  │   │  Framework : Django + Django REST Framework      │ │   │  │  Framework : FastAPI                            │  │
+│  │  Language  : TypeScript                           │   │  Language  : Python                              │ │   │  │  Language  : Python                             │  │
+│  │                                                   │   │                                                  │ │   │  │                                                 │  │
+│  │  Endpoints:                                       │   │  Endpoints:                                      │ │   │  │  Endpoints:                                     │  │
+│  │  · CRUD  /continents /countries /cities           │   │  · CRUD  solicitantes, tickets, comentarios      │ │   │  │  · CRUD  equipos, jugadores, partidos           │  │
+│  │  · POST  /api/v2/chain  (enrich + forward)        │   │  · POST  /api/v2/chain/  (enrich + forward)      │ │   │  │  · POST  /api/v2/integracion/  (enrich)         │  │
+│  │  · GET   /api/v2/chain  (history)                 │   │  · GET   trazabilidad de eventos                 │ │   │  │  · GET   métricas (endpoint para Grafana)       │  │
+│  │                                                   │   │                                                  │ │   │  │                                                 │  │
+│  │  ┌────────────────────────────────────────────┐   │   │  ┌────────────────────────────────────────────┐ │ │   │  │  ┌───────────────────────────────────────────┐  │  │
+│  │  │  GKE Cluster: geography-cluster            │   │   │  │  Cloud Run                                 │ │ │   │  │  │  EC2 Instance                             │  │  │
+│  │  │  Region: us-central1  ·  3 nodes e2-medium │   │   │  │  Region: us-central1                       │ │ │   │  │  │  Port: 8000                               │  │  │
+│  │  │                                            │   │   │  │                                            │ │ │   │  │  │                                           │  │  │
+│  │  │  ┌────────┐  ┌────────┐  ┌────────┐       │   │   │  │  ┌──────────────────────────────────────┐  │ │ │   │  │  │  ┌─────────────────────────────────────┐  │  │  │
+│  │  │  │ Pod 1  │  │ Pod 2  │  │ Pod 3  │       │   │   │  │  │  Docker container                    │  │ │ │   │  │  │  │  Docker container                   │  │  │  │
+│  │  │  │ :3000  │  │ :3000  │  │ :3000  │       │   │   │  │  │  Django + deps + logic               │  │ │ │   │  │  │  │  FastAPI + deps + logic             │  │  │  │
+│  │  │  └───┬────┘  └───┬────┘  └───┬────┘       │   │   │  │  └──────────────┬───────────────────────┘  │ │ │   │  │  │  └────────────────┬────────────────────┘  │  │  │
+│  │  │      └───────────┴───────────┘             │   │   │  └─────────────────┼──────────────────────────┘ │ │   │  │  └───────────────────┼───────────────────────┘  │  │
+│  │  │              LoadBalancer                  │   │   │                    │                             │ │   │  │                      │                          │  │
+│  │  │           35.194.53.58:80                  │   │   │  ┌─────────────────▼──────────────────────────┐ │ │   │  │  ┌───────────────────▼───────────────────────┐  │  │
+│  │  └────────────────────┬───────────────────────┘   │   │  │  Cloud SQL (PostgreSQL)                     │ │ │   │  │  │  PostgreSQL (RDS or local)                │  │  │
+│  │                       │                           │   │  │  solicitantes · tickets · comentarios       │ │ │   │  │  │  equipos · jugadores · partidos           │  │  │
+│  │  ┌────────────────────▼───────────────────────┐   │   │  │  eventos de integración                     │ │ │   │  │  │  integraciones                           │  │  │
+│  │  │  Cloud SQL: geography-db                   │   │   │  └────────────────────────────────────────────┘ │ │   │  │  └───────────────────────────────────────────┘  │  │
+│  │  │  PostgreSQL 13  ·  34.10.221.217:5432      │   │   │                                                  │ │   │  │                                                 │  │
+│  │  │  continents · countries · cities           │   │   │  Observability:                                  │ │   │  │  Observability:                                 │  │
+│  │  │  chain_result                              │   │   │  · Cloud Logging / Cloud Monitoring              │ │   │  │  · CloudWatch (logs)                            │  │
+│  │  └────────────────────────────────────────────┘   │   │  · Grafana (métricas y visualización)            │ │   │  │  · Grafana (métricas vía endpoint propio)       │  │
+│  │                                                   │   │                                                  │ │   │  └─────────────────────────────────────────────────┘  │
+│  │  CI/CD: Cloud Build → Artifact Registry → GKE     │   │  URL: helpdesk-api-702693621768.                 │ │   │  URL: http://13.59.49.180:8000                        │
+│  │  Auth: none                                       │   │       us-central1.run.app                        │ │   │  Auth: none                                           │
+│  │  Observability: Grafana Cloud + GCP Monitoring    │   │  Auth: X-Integration-Token header                │ │   └───────────────────────────────────────────────────────┘
+│  └───────────────────────────────────────────────────┘   └──────────────────────────────────────────────────┘ │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
-─────────────────────────────── CHAIN FLOW ──────────────────────────────────
+─────────────────────────────────────────── CHAIN FLOW ───────────────────────────────────────────────
 
-  Client (Postman / curl)
+  Client (Postman / curl / browser)
         │
-        │  POST /api/v2/chain  { siguiente: helpdesk_url }
+        │  POST http://35.194.53.58/api/v2/chain
+        │  { "meta": { "antes": null, "origen": null, "siguiente": "<helpdesk_url>" }, ... }
         ▼
-  ┌─────────────┐  POST + geo data   ┌─────────────┐  POST + soporte data  ┌─────────────┐
-  │  Geography  │──────────────────► │  Helpdesk   │─────────────────────► │   Fútbol    │
-  │  GCP / GKE  │                    │ GCP / Cloud │                       │  AWS / EC2  │
-  │             │                    │     Run     │                       │             │
-  │ + geografia │                    │  + soporte  │                       │  + futbol   │
-  └─────────────┘                    └─────────────┘                       └──────┬──────┘
-        ▲                                                                          │
-        │               final payload bubbles back                                 │
-        └──────────────────────────────────────────────────────────────────────────┘
+  ┌──────────────────┐   enriched + token header   ┌──────────────────┐   enriched   ┌──────────────────┐
+  │   Geography API  │ ──────────────────────────► │   Helpdesk API   │ ───────────► │   Fútbol API     │
+  │   GCP / GKE      │                             │   GCP / Cloud Run│              │   AWS / EC2      │
+  │   NestJS         │                             │   Django         │              │   FastAPI        │
+  │                  │                             │                  │              │                  │
+  │  adds:           │                             │  adds:           │              │  adds:           │
+  │  payload.        │                             │  payload.        │              │  payload.        │
+  │  geografia       │                             │  soporte         │              │  futbol          │
+  └──────────────────┘                             └──────────────────┘              └────────┬─────────┘
+        ▲                                                                                     │
+        │                          final accumulated payload bubbles back                     │
+        └─────────────────────────────────────────────────────────────────────────────────────┘
 
-  payload grows at each hop:
-  After Geography → { geografia: { continent, country, city } }
-  After Helpdesk  → { geografia: {...}, soporte: { solicitante, ticket, comentario } }
-  After Fútbol    → { geografia: {...}, soporte: {...}, futbol: { equipo, jugador, partido } }
+  Final payload contains all three domains:
+  {
+    "meta":    { "antes": "api-soporte", "origen": "aws-futbol-api", "siguiente": null },
+    "payload": {
+      "geografia": { "continent": {...}, "country": {...}, "city": {...} },
+      "soporte":   { "solicitante": {...}, "ticket": {...}, "comentario": {...} },
+      "futbol":    { "equipo": {...}, "jugador": {...}, "partido": {...} }
+    }
+  }
 ```
 
 ### GCP Deployment Architecture

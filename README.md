@@ -134,6 +134,60 @@ curl http://35.194.53.58/api/v2/chain          # GET saved terminal results
   }
 ```
 
+#### Visual Overview
+
+```mermaid
+flowchart TD
+    Client([Client\nPostman / curl / browser])
+
+    subgraph GCP [GCP — us-central1]
+        direction TB
+
+        subgraph CICD [CI/CD Pipeline]
+            GitHub[GitHub\ncubito1080/devops]
+            CloudBuild[Cloud Build\ncloudbuild.yaml]
+            ArtifactReg[Artifact Registry\ngeography-api]
+            GitHub -->|push to master| CloudBuild
+            CloudBuild -->|docker push| ArtifactReg
+        end
+
+        subgraph GKE [GKE Cluster — geography-cluster — 3 nodes e2-medium]
+            LoadBalancer[Load Balancer\n35.194.53.58 : 80]
+            subgraph Pods [Namespace: geography-api]
+                Pod1[Pod 1\nNestJS 11 :3000]
+                Pod2[Pod 2\nNestJS 11 :3000]
+                Pod3[Pod 3\nNestJS 11 :3000]
+            end
+            LoadBalancer --> Pod1 & Pod2 & Pod3
+        end
+
+        GeoSQL[(Cloud SQL — geography-db\nPostgreSQL 13\ncontinents · countries · cities\nchain_result)]
+
+        ArtifactReg -->|rolling deploy| GKE
+
+        subgraph CloudRun [Cloud Run]
+            HelpdeskAPI[Helpdesk API\nDjango + DRF\napi/v2/chain/]
+        end
+
+        HelpSQL[(Cloud SQL\nPostgreSQL\nsolicitantes · tickets\ncomentarios · eventos)]
+    end
+
+    subgraph AWS [AWS — EC2]
+        FutbolAPI[Futbol API\nFastAPI\napi/v2/integracion/\nport 8000]
+        FutbolDB[(PostgreSQL\nequipos · jugadores\npartidos · integraciones)]
+    end
+
+    Client -->|POST /api/v2/chain| LoadBalancer
+    Pod1 & Pod2 & Pod3 -->|read/write| GeoSQL
+    Pod1 & Pod2 & Pod3 -->|enriched payload + X-Integration-Token| HelpdeskAPI
+    HelpdeskAPI -->|read/write| HelpSQL
+    HelpdeskAPI -->|enriched payload| FutbolAPI
+    FutbolAPI -->|read/write| FutbolDB
+    FutbolAPI -.->|final accumulated response| Client
+```
+
+---
+
 ### GCP Deployment Architecture
 
 ```

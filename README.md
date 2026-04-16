@@ -27,6 +27,7 @@ A RESTful API built with **NestJS**, **TypeORM**, and **PostgreSQL** that models
   - [How meta evolves](#how-meta-evolves-through-the-chain)
   - [Request Format](#request-format)
   - [Integration for Peers](#integration-example-for-peers)
+  - [Traceability Events](#traceability-events)
 - [Domain Model](#-domain-model)
   - [ERD](#entity-relationship-diagram)
   - [Entities](#entities)
@@ -488,6 +489,84 @@ curl -X POST http://35.194.53.58/api/v2/chain \
 
 ---
 
+### Traceability Events
+
+Every `POST /api/v2/chain` automatically logs one or two `ChainEvent` records and returns a `trace_id` in the response. Use it to audit the full lifecycle of any request.
+
+#### ChainEvent fields
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `integer` | Auto-increment |
+| `trace_id` | `string` | `trace-{uuid}` — shared across all events for one request |
+| `direccion` | `string` | `entrada` (this API received) · `salida` (this API forwarded) |
+| `estado` | `string` | `pendiente` → `exitoso` / `fallido` |
+| `sistema_origen` | `string` | Name of the API that sent the request |
+| `sistema_destino` | `string` | Name of the API that received it |
+| `endpoint` | `string` | URL of the endpoint called |
+| `metodo` | `string` | HTTP method (always `POST`) |
+| `status_code` | `integer` | HTTP status returned |
+| `request_json` | `jsonb` | Full payload that was sent |
+| `response_json` | `jsonb` | Full response received |
+| `error` | `string` | Error message if `estado = fallido` |
+| `created_at` | `timestamp` | Auto |
+| `updated_at` | `timestamp` | Auto |
+
+#### Example — events for one forwarded request
+
+```json
+{
+  "count": 2,
+  "trace_id": "trace-04eda815-7e71-46c6-986e-6a34f4459e0e",
+  "results": [
+    {
+      "id": 1,
+      "trace_id": "trace-04eda815-7e71-46c6-986e-6a34f4459e0e",
+      "direccion": "entrada",
+      "estado": "exitoso",
+      "sistema_origen": "client",
+      "sistema_destino": "api-geografia",
+      "endpoint": "/api/v2/chain",
+      "metodo": "POST",
+      "status_code": 200,
+      "request_json": { "meta": { "antes": null, "origen": "client", "siguiente": "https://helpdesk-api..." }, "..." : "..." },
+      "response_json": { "..." : "..." },
+      "error": null
+    },
+    {
+      "id": 2,
+      "trace_id": "trace-04eda815-7e71-46c6-986e-6a34f4459e0e",
+      "direccion": "salida",
+      "estado": "exitoso",
+      "sistema_origen": "api-geografia",
+      "sistema_destino": "helpdesk-api",
+      "endpoint": "https://helpdesk-api-702693621768.us-central1.run.app/api/v2/chain/",
+      "metodo": "POST",
+      "status_code": 202,
+      "request_json": { "..." : "..." },
+      "response_json": { "..." : "..." },
+      "error": null
+    }
+  ]
+}
+```
+
+#### PATCH — manually correct an event
+
+```bash
+PATCH /api/v2/chain/events/:trace_id
+Content-Type: application/json
+
+{
+  "estado":        "exitoso",
+  "status_code":   200,
+  "error":         null,
+  "response_json": {}
+}
+```
+
+---
+
 ## 🗃 Domain Model
 
 ### Entity Relationship Diagram
@@ -642,11 +721,21 @@ Same methods as v1, under `/api/v2/`:
 
 ### v2 — Chain
 
+#### ChainResult (terminal saves)
+
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/v2/chain` | Enrich payload with geo data under `payload.geografia` and forward to next node |
+| `POST` | `/api/v2/chain` | Enrich payload with geo data, add `trace_id`, forward to next node |
 | `GET` | `/api/v2/chain` | List all saved terminal chain results (newest first) |
 | `GET` | `/api/v2/chain/:id` | Get one saved chain result by id |
+
+#### ChainEvent (traceability log)
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/v2/chain/events/all` | List all chain events (entrada + salida), newest first |
+| `GET` | `/api/v2/chain/events/:trace_id` | Get all events for one `trace_id` |
+| `PATCH` | `/api/v2/chain/events/:trace_id` | Manually update `estado`, `status_code`, `error`, `response_json` |
 
 See [Linked-List API Chain](#-linked-list-api-chain) for full docs.
 
@@ -855,26 +944,42 @@ docker exec -it devops-postgres-1 psql -U jero -d geography_db
 ### Chain Smoke Tests
 
 ```bash
-# Terminal node — saves to DB and returns enriched payload
+# 1. Terminal node — saves to DB and returns enriched payload with trace_id
 curl -X POST http://localhost:3000/api/v2/chain \
   -H "Content-Type: application/json" \
   -d '{"meta":{"antes":null,"origen":"test","siguiente":null},"payload":{}}'
 
-# With specific IDs
+# 2. With specific IDs
 curl -X POST http://localhost:3000/api/v2/chain \
   -H "Content-Type: application/json" \
   -d '{"meta":{"antes":null,"origen":"test","siguiente":null},"continent_id":2,"country_id":5,"city_id":5,"payload":{}}'
 
-# Forward to Soporte API (group chain)
+# 3. Geography → Fútbol (skip Helpdesk)
 curl -X POST http://localhost:3000/api/v2/chain \
   -H "Content-Type: application/json" \
   -d '{"meta":{"antes":null,"origen":"client","siguiente":"http://13.59.49.180:8000/api/v2/integracion/"},"continent_id":1,"country_id":1,"city_id":1,"payload":{}}'
+
+# 4. Full chain: Geography → Helpdesk → Fútbol
+curl -X POST http://localhost:3000/api/v2/chain \
+  -H "Content-Type: application/json" \
+  -d '{"meta":{"antes":null,"origen":"client","siguiente":"https://helpdesk-api-702693621768.us-central1.run.app/api/v2/chain/"},"continent_id":1,"country_id":1,"city_id":1,"payload":{}}'
 
 # View saved terminal results
 curl http://localhost:3000/api/v2/chain
 
 # View one result by id
 curl http://localhost:3000/api/v2/chain/1
+
+# View all event logs
+curl http://localhost:3000/api/v2/chain/events/all
+
+# View events for a specific trace_id (grab from POST response)
+curl http://localhost:3000/api/v2/chain/events/trace-REPLACE-UUID
+
+# Manually update event state
+curl -X PATCH http://localhost:3000/api/v2/chain/events/trace-REPLACE-UUID \
+  -H "Content-Type: application/json" \
+  -d '{"estado":"exitoso","status_code":200,"error":null}'
 ```
 
 ---

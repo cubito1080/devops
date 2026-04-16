@@ -112,8 +112,3 @@ export class ChainController {
     return { count: updated.length, trace_id, results: updated };
   }
 }
-    const result = await this.chainService.findOne(id);
-    if (!result) throw new NotFoundException(`Chain result with id ${id} not found`);
-    return result;
-  }
-}

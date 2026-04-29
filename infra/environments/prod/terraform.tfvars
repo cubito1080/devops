@@ -1,0 +1,5 @@
+project_id   = "geography-api-493315"
+region       = "us-central1"
+db_password  = "Geo1234!"
+github_owner = "cubito1080"
+github_repo  = "devops"

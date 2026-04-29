@@ -79,21 +79,24 @@ module "artifact_registry" {
 }
 
 # ─── Cloud Build Trigger ─────────────────────────────────────────────────────
-module "cloudbuild" {
-  source = "../../modules/cloudbuild"
-
-  project_id     = var.project_id
-  trigger_name   = "deploy-on-push-${local.env}"
-  github_owner   = var.github_owner
-  github_repo    = var.github_repo
-  branch_pattern = "^master$"
-  region         = var.region
-  repository_id  = local.repo_id
-  cluster_name   = local.cluster_name
-  cluster_region = var.region
-
-  depends_on = [module.artifact_registry, module.gke]
-}
+# NOTE: Requires GitHub connection to be established manually in GCP Console
+# (Cloud Build > Repositories > Connect Repository) before this can be applied.
+# Uncomment after connecting GitHub.
+# module "cloudbuild" {
+#   source = "../../modules/cloudbuild"
+#
+#   project_id     = var.project_id
+#   trigger_name   = "deploy-on-push-${local.env}"
+#   github_owner   = var.github_owner
+#   github_repo    = var.github_repo
+#   branch_pattern = "^master$"
+#   region         = var.region
+#   repository_id  = local.repo_id
+#   cluster_name   = local.cluster_name
+#   cluster_region = var.region
+#
+#   depends_on = [module.artifact_registry, module.gke]
+# }
 
 # ─── K8s Bootstrap ───────────────────────────────────────────────────────────
 # Runs once after GKE and Cloud SQL are ready.
@@ -106,7 +109,7 @@ resource "null_resource" "k8s_bootstrap" {
   }
 
   provisioner "local-exec" {
-    interpreter = ["wsl", "-e", "bash", "-c"]
+    interpreter = ["bash", "-c"]
     command     = <<-EOT
       gcloud container clusters get-credentials ${module.gke.cluster_name} \
         --region ${var.region} --project ${var.project_id} && \
@@ -137,7 +140,7 @@ output "db_instance_ip" {
   value       = module.cloudsql.instance_ip
 }
 
-output "cloudbuild_trigger" {
-  description = "Cloud Build trigger name"
-  value       = module.cloudbuild.trigger_name
-}
+# output "cloudbuild_trigger" {
+#   description = "Cloud Build trigger name"
+#   value       = module.cloudbuild.trigger_name
+# }
